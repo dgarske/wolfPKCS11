@@ -350,6 +350,14 @@ static CK_RV find_rsa_priv_key_label(CK_SESSION_HANDLE session,
         CHECK_CKR(ret, "RSA Private Key Find label Objects Count");
     }
 
+    (void)rsa_2048_u;
+    (void)rsa_2048_dQ;
+    (void)rsa_2048_dP;
+    (void)rsa_2048_q;
+    (void)rsa_2048_p;
+    (void)rsa_2048_priv_exp;
+    (void)rsa_2048_modulus;
+
     return ret;
 }
 
