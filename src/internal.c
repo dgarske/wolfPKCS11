@@ -2053,7 +2053,7 @@ static int wp11_Object_Decode_RsaKey(WP11_Object* object)
         object->slot->devId, (int)object->objClass, object->keyDataLen);
 #endif
     if (object->objClass == CKO_PRIVATE_KEY &&
-        object->slot->devId != INVALID_DEVID)
+        object->slot != NULL && object->slot->devId != INVALID_DEVID)
     {
         int pubAreaSize = 0;
 
@@ -2140,8 +2140,8 @@ static int wp11_Object_Encode_RsaKey(WP11_Object* object)
         object->slot->devId, (int)object->objClass, object->tpmKey.pub.size,
         object->tpmKey.priv.size);
 #endif
-    if (object->slot->devId != INVALID_DEVID && object->tpmKey.pub.size > 0 &&
-        object->tpmKey.priv.size > 0) {
+    if (object->slot != NULL && object->slot->devId != INVALID_DEVID &&
+        object->tpmKey.pub.size > 0 && object->tpmKey.priv.size > 0) {
         /* save off the public and private portion of the TPM key.
          * Private is encrypted by a symmetric key only known by the TPM.
          * Make publicArea in encoded format to eliminate empty fields */
@@ -2192,8 +2192,9 @@ static int wp11_Object_Encode_RsaKey(WP11_Object* object)
     }
 
 #ifdef WOLFPKCS11_TPM
-    if (ret == 0 && object->slot->devId != INVALID_DEVID &&
-        object->tpmKey.pub.size > 0 && object->tpmKey.priv.size > 0) {
+    if (ret == 0 && object->slot != NULL && object->slot->devId != INVALID_DEVID
+        && object->tpmKey.pub.size > 0 && object->tpmKey.priv.size > 0)
+    {
         int idx = 0;
         /* Write size marker for the public part */
         XMEMCPY(object->keyData, &object->tpmKey.pub.size,
