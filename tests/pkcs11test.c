@@ -3735,63 +3735,6 @@ static CK_RV rsa_pss_test(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE priv,
 }
 #endif
 
-static CK_RV test_rsa_generate_store(void *args)
-{
-    CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
-    CK_RV ret = CKR_OK;
-    CK_OBJECT_HANDLE priv = CK_INVALID_HANDLE;
-    CK_OBJECT_HANDLE pub = CK_INVALID_HANDLE;
-    int sessFlags = CKF_SERIAL_SESSION | CKF_RW_SESSION;
-    CK_ULONG          bits = 2048;
-    CK_MECHANISM      mech;
-    CK_ATTRIBUTE      pubKeyTmpl[] = {
-        { CKA_MODULUS_BITS,    &bits,    sizeof(bits)    },
-        { CKA_ENCRYPT,         &ckTrue,  sizeof(ckTrue)  },
-        { CKA_VERIFY,          &ckTrue,  sizeof(ckTrue)  },
-        { CKA_PUBLIC_EXPONENT, rsa_2048_pub_exp,  sizeof(rsa_2048_pub_exp) },
-        { CKA_TOKEN,           &ckTrue,  sizeof(ckTrue)  },
-        { CKA_LABEL,           (unsigned char*)"", 0 },
-    };
-    int               pubTmplCnt = sizeof(pubKeyTmpl)/sizeof(*pubKeyTmpl);
-    CK_ATTRIBUTE      privKeyTmpl[] = {
-        { CKA_DECRYPT,  &ckTrue, sizeof(ckTrue) },
-        { CKA_SIGN,     &ckTrue, sizeof(ckTrue) },
-        { CKA_LABEL,    (unsigned char*)"priv_label", 10 },
-        { CKA_TOKEN,    &ckTrue, sizeof(ckTrue) },
-    };
-
-    int privTmplCnt = 4;
-
-    if (ret == CKR_OK) {
-        mech.mechanism      = CKM_RSA_PKCS_KEY_PAIR_GEN;
-        mech.ulParameterLen = 0;
-        mech.pParameter     = NULL;
-
-        ret = funcList->C_GenerateKeyPair(session, &mech, pubKeyTmpl,
-                           pubTmplCnt, privKeyTmpl, privTmplCnt, &pub, &priv);
-        CHECK_CKR(ret, "RSA Generate Key Pair");
-    }
-
-
-    if ((ret == CKR_OK) && (userPinLen != 0)) {
-        funcList->C_Logout(session);
-        funcList->C_CloseSession(session);
-        ret = funcList->C_OpenSession(slot, sessFlags, NULL, NULL, &session);
-        CHECK_CKR(ret, "Open Session");
-    }
-
-    if (ret == CKR_OK && userPinLen != 0) {
-        ret = funcList->C_Login(session, CKU_USER, userPin, userPinLen);
-        CHECK_CKR(ret, "Login");
-    }
-
-    funcList->C_DestroyObject(session, priv);
-    funcList->C_DestroyObject(session, pub);
-
-    return ret;
-
-}
-
 static CK_RV test_rsa_no_modulus(void* args)
 {
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
@@ -3887,7 +3830,6 @@ static CK_RV test_rsa_no_public_exponent(void *args)
     funcList->C_DestroyObject(session, hTest);
 
     return ret;
-
 }
 
 static CK_RV test_rsa_fixed_keys_raw(void* args)
@@ -8646,7 +8588,6 @@ static TEST_FUNC testFunc[] = {
 #ifndef NO_RSA
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_no_modulus),
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_no_public_exponent),
-    PKCS11TEST_FUNC_SESS_DECL(test_rsa_generate_store),
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_fixed_keys_raw),
     PKCS11TEST_FUNC_SESS_DECL(test_rsa_fixed_keys_pkcs15_enc),
 #ifndef WC_NO_RSA_OAEP

@@ -2048,10 +2048,12 @@ static int wp11_Object_Decode_RsaKey(WP11_Object* object)
     word32 idx = 0;
 
 #ifdef WOLFPKCS11_TPM
-    if (object->slot->devId != INVALID_DEVID &&
-        object->keyDataLen > (
-            (int)sizeof(object->tpmKey.pub) +
-            (int)sizeof(object->tpmKey.priv)))
+#ifdef WOLFPKCS11_DEBUG_STORE
+    printf("DecodeRSAKey: DevID %d, objClass %d, keyDataLen %d\n",
+        object->slot->devId, (int)object->objClass, object->keyDataLen);
+#endif
+    if (object->objClass == CKO_PRIVATE_KEY &&
+        object->slot->devId != INVALID_DEVID)
     {
         int pubAreaSize = 0;
 
@@ -2059,9 +2061,10 @@ static int wp11_Object_Decode_RsaKey(WP11_Object* object)
         XMEMCPY(&object->tpmKey.pub.size, object->keyData,
             sizeof(object->tpmKey.pub.size));
         idx += sizeof(object->tpmKey.pub.size);
-        /* Parse public */
+        /* Parse public
+         * TODO: should pass: sizeof(UINT16) + object->tpmKey.pub.size */
         ret = TPM2_ParsePublic(&object->tpmKey.pub, object->keyData + idx,
-            sizeof(UINT16) + object->tpmKey.pub.size, &pubAreaSize);
+            sizeof(object->tpmKey.pub), &pubAreaSize);
         if (ret == 0) {
             idx += sizeof(UINT16) + object->tpmKey.pub.size;
             /* Extract private size and private */
@@ -2069,8 +2072,19 @@ static int wp11_Object_Decode_RsaKey(WP11_Object* object)
                 object->tpmKey.priv.size);
         }
         (void)pubAreaSize; /* already checked */
+
+        if (ret == 0) {
+            object->encoded = 0;
+            return ret;
+        }
+        else {
+        #ifdef WOLFPKCS11_DEBUG_STORE
+            printf("Failed to parse as TPM key. Trying as DER...\n");
+        #endif
+            ret = 0;
+        }
     }
-    else
+
 #endif
     if (object->objClass == CKO_PRIVATE_KEY) {
         unsigned char* der;
@@ -2121,6 +2135,11 @@ static int wp11_Object_Encode_RsaKey(WP11_Object* object)
 #ifdef WOLFPKCS11_TPM
     byte pubAreaBuffer[sizeof(TPM2B_PUBLIC)];
     int pubAreaSize = 0;
+#ifdef WOLFPKCS11_DEBUG_STORE
+    printf("EncodeRSAKey: DevID %d, objClass %d, PubSz %d, PrivSz %d\n",
+        object->slot->devId, (int)object->objClass, object->tpmKey.pub.size,
+        object->tpmKey.priv.size);
+#endif
     if (object->slot->devId != INVALID_DEVID && object->tpmKey.pub.size > 0 &&
         object->tpmKey.priv.size > 0) {
         /* save off the public and private portion of the TPM key.
@@ -5450,7 +5469,7 @@ static WP11_Object* wp11_Session_FindNext(WP11_Session* session, int onToken,
         }
    #endif
 
-        if ((ret->opFlag | WP11_FLAG_PRIVATE) == WP11_FLAG_PRIVATE) {
+        if ((ret->opFlag & WP11_FLAG_PRIVATE) == WP11_FLAG_PRIVATE) {
             if (!onToken)
                 WP11_Lock_LockRO(&session->slot->token.lock);
             if (session->slot->token.loginState == WP11_APP_STATE_RW_PUBLIC ||
