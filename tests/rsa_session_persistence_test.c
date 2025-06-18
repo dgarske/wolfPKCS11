@@ -90,7 +90,9 @@ static int userPinLen = 15;
 static CK_OBJECT_CLASS pubKeyClass = CKO_PUBLIC_KEY;
 static CK_OBJECT_CLASS privKeyClass = CKO_PRIVATE_KEY;
 static CK_BBOOL ckTrue = CK_TRUE;
+#ifndef WOLFSSL_KEY_GEN
 static CK_BBOOL ckFalse = CK_FALSE;
+#endif
 static CK_KEY_TYPE rsaKeyType = CKK_RSA;
 
 
@@ -124,7 +126,7 @@ static CK_RV pkcs11_init(void)
 
 #ifndef HAVE_PKCS11_STATIC
     CK_C_GetFunctionList func;
-    
+
     dlib = dlopen(WOLFPKCS11_DLL_FILENAME, RTLD_NOW | RTLD_LOCAL);
     if (dlib == NULL) {
         fprintf(stderr, "dlopen error: %s\n", dlerror());
@@ -211,16 +213,16 @@ static CK_RV pkcs11_set_user_pin(void)
 
     ret = funcList->C_OpenSession(slot, sessFlags, NULL, NULL, &session);
     CHECK_CKR(ret, "Open Session for PIN setup");
-    
+
     if (ret == CKR_OK) {
         ret = funcList->C_Login(session, CKU_SO, soPin, soPinLen);
         CHECK_CKR(ret, "Login as SO");
-        
+
         if (ret == CKR_OK) {
             ret = funcList->C_InitPIN(session, userPin, userPinLen);
             CHECK_CKR(ret, "Set User PIN - Init PIN");
         }
-        
+
         funcList->C_Logout(session);
         funcList->C_CloseSession(session);
     }
@@ -235,7 +237,7 @@ static CK_RV pkcs11_open_session(CK_SESSION_HANDLE* session)
 
     ret = funcList->C_OpenSession(slot, sessFlags, NULL, NULL, session);
     CHECK_CKR(ret, "Open Session");
-    
+
     if (ret == CKR_OK && userPinLen != 0) {
         ret = funcList->C_Login(*session, CKU_USER, userPin, userPinLen);
         CHECK_CKR(ret, "Login");
@@ -259,8 +261,50 @@ static CK_RV pkcs11_close_session(CK_SESSION_HANDLE session)
     return ret;
 }
 
-static CK_RV create_rsa_key_pair(CK_SESSION_HANDLE session, 
-                                 CK_OBJECT_HANDLE* pubKey, 
+#ifdef WOLFSSL_KEY_GEN
+static CK_RV create_rsa_key_pair(CK_SESSION_HANDLE session,
+                                 CK_OBJECT_HANDLE* pubKey,
+                                 CK_OBJECT_HANDLE* privKey)
+{
+    CK_RV ret = CKR_OK;
+    CK_ULONG          bits = 2048;
+    CK_MECHANISM      mech;
+    CK_ATTRIBUTE      pubKeyTmpl[] = {
+        { CKA_MODULUS_BITS,    &bits,    sizeof(bits)    },
+        { CKA_ENCRYPT,         &ckTrue,  sizeof(ckTrue)  },
+        { CKA_VERIFY,          &ckTrue,  sizeof(ckTrue)  },
+        { CKA_PUBLIC_EXPONENT, rsa_2048_pub_exp,  sizeof(rsa_2048_pub_exp) },
+        { CKA_TOKEN,           &ckTrue,  sizeof(ckTrue)  },
+        { CKA_ID,              rsaKeyId,            sizeof(rsaKeyId)           },
+        { CKA_LABEL,           rsaKeyLabel,         sizeof(rsaKeyLabel)-1      }
+    };
+    int               pubTmplCnt = sizeof(pubKeyTmpl)/sizeof(*pubKeyTmpl);
+    CK_ATTRIBUTE      privKeyTmpl[] = {
+        { CKA_DECRYPT,  &ckTrue, sizeof(ckTrue) },
+        { CKA_SIGN,     &ckTrue, sizeof(ckTrue) },
+        { CKA_TOKEN,    &ckTrue, sizeof(ckTrue) },
+        //{ CKA_SENSITIVE,         &ckFalse,            sizeof(ckFalse)            },
+        { CKA_ID,                rsaKeyId,            sizeof(rsaKeyId)           },
+        { CKA_LABEL,             rsaKeyLabel,         sizeof(rsaKeyLabel)-1      }
+    };
+    int privTmplCnt = sizeof(privKeyTmpl)/sizeof(*privKeyTmpl);
+
+    if (ret == CKR_OK) {
+        mech.mechanism      = CKM_RSA_PKCS_KEY_PAIR_GEN;
+        mech.ulParameterLen = 0;
+        mech.pParameter     = NULL;
+
+        ret = funcList->C_GenerateKeyPair(session, &mech, pubKeyTmpl,
+                           pubTmplCnt, privKeyTmpl, privTmplCnt, pubKey, privKey);
+        CHECK_CKR(ret, "RSA Generate Key Pair");
+    }
+
+    return ret;
+
+}
+#else
+static CK_RV create_rsa_key_pair(CK_SESSION_HANDLE session,
+                                 CK_OBJECT_HANDLE* pubKey,
                                  CK_OBJECT_HANDLE* privKey)
 {
     CK_RV ret;
@@ -297,20 +341,21 @@ static CK_RV create_rsa_key_pair(CK_SESSION_HANDLE session,
         { CKA_LABEL,             rsaKeyLabel,         sizeof(rsaKeyLabel)-1      }
     };
 
-    ret = funcList->C_CreateObject(session, pubKeyTemplate, 
-                                   sizeof(pubKeyTemplate)/sizeof(CK_ATTRIBUTE), 
+    ret = funcList->C_CreateObject(session, pubKeyTemplate,
+                                   sizeof(pubKeyTemplate)/sizeof(CK_ATTRIBUTE),
                                    pubKey);
     CHECK_CKR(ret, "Create RSA Public Key");
 
     if (ret == CKR_OK) {
-        ret = funcList->C_CreateObject(session, privKeyTemplate, 
-                                       sizeof(privKeyTemplate)/sizeof(CK_ATTRIBUTE), 
+        ret = funcList->C_CreateObject(session, privKeyTemplate,
+                                       sizeof(privKeyTemplate)/sizeof(CK_ATTRIBUTE),
                                        privKey);
         CHECK_CKR(ret, "Create RSA Private Key");
     }
 
     return ret;
 }
+#endif /* WOLFSSL_KEY_GEN */
 
 static CK_RV find_rsa_key_pair(CK_SESSION_HANDLE session,
                                CK_OBJECT_HANDLE* pubKey,
@@ -330,7 +375,7 @@ static CK_RV find_rsa_key_pair(CK_SESSION_HANDLE session,
     };
 
     /* Find public key */
-    ret = funcList->C_FindObjectsInit(session, pubKeyTemplate, 
+    ret = funcList->C_FindObjectsInit(session, pubKeyTemplate,
                                       sizeof(pubKeyTemplate)/sizeof(CK_ATTRIBUTE));
     CHECK_CKR(ret, "Find Public Key Init");
 
@@ -351,7 +396,7 @@ static CK_RV find_rsa_key_pair(CK_SESSION_HANDLE session,
 
     /* Find private key */
     if (ret == CKR_OK) {
-        ret = funcList->C_FindObjectsInit(session, privKeyTemplate, 
+        ret = funcList->C_FindObjectsInit(session, privKeyTemplate,
                                           sizeof(privKeyTemplate)/sizeof(CK_ATTRIBUTE));
         CHECK_CKR(ret, "Find Private Key Init");
     }
@@ -384,7 +429,7 @@ static CK_RV rsa_sign_test(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE privKey,
     CHECK_CKR(ret, "RSA Sign Init");
 
     if (ret == CKR_OK) {
-        ret = funcList->C_Sign(session, testHash, sizeof(testHash), 
+        ret = funcList->C_Sign(session, testHash, sizeof(testHash),
                               signature, sigLen);
         CHECK_CKR(ret, "RSA Sign");
     }
@@ -392,7 +437,7 @@ static CK_RV rsa_sign_test(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE privKey,
     return ret;
 }
 
-static CK_RV rsa_encrypt_decrypt_test(CK_SESSION_HANDLE session, 
+static CK_RV rsa_encrypt_decrypt_test(CK_SESSION_HANDLE session,
                                      CK_OBJECT_HANDLE pubKey,
                                      CK_OBJECT_HANDLE privKey)
 {
@@ -420,14 +465,14 @@ static CK_RV rsa_encrypt_decrypt_test(CK_SESSION_HANDLE session,
     }
 
     if (ret == CKR_OK) {
-        ret = funcList->C_Decrypt(session, encrypted, encLen, 
+        ret = funcList->C_Decrypt(session, encrypted, encLen,
                                  decrypted, &decLen);
         CHECK_CKR(ret, "RSA Decrypt");
     }
 
     /* Verify decrypted data matches original */
     if (ret == CKR_OK) {
-        if (decLen != sizeof(testPlaintext) || 
+        if (decLen != sizeof(testPlaintext) ||
             XMEMCMP(decrypted, testPlaintext, decLen) != 0) {
             fprintf(stderr, "Decrypted data doesn't match original\n");
             ret = CKR_GENERAL_ERROR;
