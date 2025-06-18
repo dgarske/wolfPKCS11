@@ -2424,6 +2424,17 @@ static int wp11_Object_Decode_RsaKey(WP11_Object* object)
             ret = wolfTPM2_RsaKey_TpmToWolf(&object->slot->tpmDev,
                 (WOLFTPM2_KEY*)&object->tpmKey, &object->data.rsaKey);
         }
+        if (ret == 0) {
+            /* load key into TPM (get handle) */
+            if (object->tpmKey.priv.size == 0) {
+                ret = wolfTPM2_LoadPublicKey(&object->slot->tpmDev,
+                    (WOLFTPM2_KEY*)&object->tpmKey, &object->tpmKey.pub);
+            }
+            else {
+                ret = wolfTPM2_LoadKey(&object->slot->tpmDev, &object->tpmKey,
+                    &object->slot->tpmCtx.storageKey->handle);
+            }
+        }
     }
     else
 #endif
