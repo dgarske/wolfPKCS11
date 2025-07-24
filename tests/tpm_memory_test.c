@@ -70,6 +70,7 @@ static CK_ULONG userPinLen;
 static byte* soPin = (byte*)"wolfpkcs11-so-test";
 static CK_ULONG soPinLen;
 static unsigned char tokenName[] = "wolfPKCS11 Test Token";
+static const char* libName = WOLFPKCS11_DLL_FILENAME;
 
 /* Object classes and key types */
 static CK_OBJECT_CLASS privKeyClass = CKO_PRIVATE_KEY;
@@ -172,26 +173,26 @@ static CK_RV pkcs11_init(const char* library, CK_SESSION_HANDLE* session)
 
         ret = funcList->C_OpenSession(slot, sessFlags, NULL, NULL, session);
         CHECK_CKR(ret, "Open Session");
-        
+
         if (ret == CKR_OK && userPinLen != 0) {
             ret = funcList->C_Login(*session, CKU_USER, userPin, userPinLen);
             /* If login fails, try to initialize token and set PIN */
             if (ret != CKR_OK) {
                 printf("Initial login failed. Attempting to initialize token...\n");
                 funcList->C_CloseSession(*session);
-                
+
                 /* Initialize token */
                 ret = pkcs11_init_token();
                 if (ret == CKR_OK) {
                     /* Set user PIN */
                     ret = pkcs11_set_user_pin();
                 }
-                
+
                 if (ret == CKR_OK) {
                     /* Reopen session and login */
                     ret = funcList->C_OpenSession(slot, sessFlags, NULL, NULL, session);
                     CHECK_CKR(ret, "Reopen Session");
-                    
+
                     if (ret == CKR_OK) {
                         ret = funcList->C_Login(*session, CKU_USER, userPin, userPinLen);
                         CHECK_CKR(ret, "Login after token init");
@@ -322,25 +323,23 @@ static CK_RV create_rsa_keys_and_certs(CK_SESSION_HANDLE session)
 
     printf("Creating 10 RSA private keys and 10 X.509 certificates...\n");
 
-    /* Create RSA private keys */
     for (i = 0; i < 10 && ret == CKR_OK; i++) {
+        /* Create RSA private keys */
         printf("Creating %s...\n", rsaTemplates[i].name);
-        ret = funcList->C_CreateObject(session, rsaTemplates[i].template, 
+        ret = funcList->C_CreateObject(session, rsaTemplates[i].template,
                                       rsaTemplates[i].count, &obj);
         CHECK_CKR(ret, rsaTemplates[i].name);
-        
+
         if (ret == CKR_OK && objectCount < 20) {
             createdObjects[objectCount++] = obj;
         }
-    }
 
-    /* Create certificates */
-    for (i = 0; i < 10 && ret == CKR_OK; i++) {
+        /* Create certificates */
         printf("Creating %s...\n", certTemplates[i].name);
-        ret = funcList->C_CreateObject(session, certTemplates[i].template, 
+        ret = funcList->C_CreateObject(session, certTemplates[i].template,
                                       certTemplates[i].count, &obj);
         CHECK_CKR(ret, certTemplates[i].name);
-        
+
         if (ret == CKR_OK && objectCount < 20) {
             createdObjects[objectCount++] = obj;
         }
@@ -357,6 +356,127 @@ static CK_RV create_rsa_keys_and_certs(CK_SESSION_HANDLE session)
     return ret;
 }
 
+static CK_RV read_rsa_keys_and_certs(CK_SESSION_HANDLE session)
+{
+    CK_RV ret = CKR_OK;
+    CK_OBJECT_HANDLE obj;
+    CK_ATTRIBUTE template[2];
+    CK_ULONG count;
+    int i;
+
+    printf("Reading 10 RSA private keys and 10 X.509 certificates...\n");
+
+    /* Read RSA private keys */
+    for (i = 0; i < 10 && ret == CKR_OK; i++) {
+        printf("Reading RSA Key %d...\n", i + 1);
+
+        /* Find the RSA private key by class and key type */
+        template[0].type = CKA_CLASS;
+        template[0].pValue = &privKeyClass;
+        template[0].ulValueLen = sizeof(privKeyClass);
+        template[1].type = CKA_KEY_TYPE;
+        template[1].pValue = &rsaKeyType;
+        template[1].ulValueLen = sizeof(rsaKeyType);
+
+        ret = funcList->C_FindObjectsInit(session, template, 2);
+        CHECK_CKR(ret, "FindObjectsInit for RSA key");
+
+        if (ret == CKR_OK) {
+            ret = funcList->C_FindObjects(session, &obj, 1, &count);
+            CHECK_CKR(ret, "FindObjects for RSA key");
+
+            if (ret == CKR_OK && count > 0) {
+                /* Read key attributes to verify it's accessible */
+                CK_ATTRIBUTE readTemplate[3];
+                CK_BBOOL decrypt, sign;
+
+                readTemplate[0].type = CKA_DECRYPT;
+                readTemplate[0].pValue = &decrypt;
+                readTemplate[0].ulValueLen = sizeof(decrypt);
+                readTemplate[1].type = CKA_SIGN;
+                readTemplate[1].pValue = &sign;
+                readTemplate[1].ulValueLen = sizeof(sign);
+                readTemplate[2].type = CKA_MODULUS;
+                readTemplate[2].pValue = NULL;
+                readTemplate[2].ulValueLen = 0;
+
+                ret = funcList->C_GetAttributeValue(session, obj, readTemplate, 3);
+                CHECK_CKR(ret, "GetAttributeValue for RSA key");
+
+                if (ret == CKR_OK) {
+                    printf("  RSA Key %d: DECRYPT=%s, SIGN=%s, MODULUS_LEN=%lu\n",
+                           i + 1,
+                           decrypt ? "TRUE" : "FALSE",
+                           sign ? "TRUE" : "FALSE",
+                           readTemplate[2].ulValueLen);
+                }
+            } else {
+                printf("  RSA Key %d: Not found\n", i + 1);
+                ret = CKR_OBJECT_HANDLE_INVALID;
+            }
+
+            funcList->C_FindObjectsFinal(session);
+        }
+    }
+
+    /* Read X.509 certificates */
+    for (i = 0; i < 10 && ret == CKR_OK; i++) {
+        printf("Reading Certificate %d...\n", i + 1);
+
+        /* Find the certificate by class and certificate type */
+        template[0].type = CKA_CLASS;
+        template[0].pValue = &certClass;
+        template[0].ulValueLen = sizeof(certClass);
+        template[1].type = CKA_CERTIFICATE_TYPE;
+        template[1].pValue = &x509CertType;
+        template[1].ulValueLen = sizeof(x509CertType);
+
+        ret = funcList->C_FindObjectsInit(session, template, 2);
+        CHECK_CKR(ret, "FindObjectsInit for certificate");
+
+        if (ret == CKR_OK) {
+            ret = funcList->C_FindObjects(session, &obj, 1, &count);
+            CHECK_CKR(ret, "FindObjects for certificate");
+
+            if (ret == CKR_OK && count > 0) {
+                /* Read certificate attributes to verify it's accessible */
+                CK_ATTRIBUTE readTemplate[2];
+                CK_BBOOL token;
+
+                readTemplate[0].type = CKA_TOKEN;
+                readTemplate[0].pValue = &token;
+                readTemplate[0].ulValueLen = sizeof(token);
+                readTemplate[1].type = CKA_VALUE;
+                readTemplate[1].pValue = NULL;
+                readTemplate[1].ulValueLen = 0;
+
+                ret = funcList->C_GetAttributeValue(session, obj, readTemplate, 2);
+                CHECK_CKR(ret, "GetAttributeValue for certificate");
+
+                if (ret == CKR_OK) {
+                    printf("  Certificate %d: TOKEN=%s, CERT_LEN=%lu\n",
+                           i + 1,
+                           token ? "TRUE" : "FALSE",
+                           readTemplate[1].ulValueLen);
+                }
+            } else {
+                printf("  Certificate %d: Not found\n", i + 1);
+                ret = CKR_OBJECT_HANDLE_INVALID;
+            }
+
+            funcList->C_FindObjectsFinal(session);
+        }
+    }
+
+    if (ret == CKR_OK) {
+        printf("Successfully read all 20 objects (10 RSA keys + 10 certificates)\n");
+    } else {
+        printf("Failed to read all objects. Error code: 0x%lx\n", ret);
+    }
+
+    return ret;
+}
+
 static CK_RV tpm_memory_test(CK_SESSION_HANDLE session)
 {
     CK_RV ret = CKR_OK;
@@ -364,6 +484,12 @@ static CK_RV tpm_memory_test(CK_SESSION_HANDLE session)
     printf("=== TPM Memory Consumption Test ===\n");
     printf("This test creates 10 RSA private keys and 10 X.509 certificates\n");
     printf("using C_CreateObject to test TPM memory consumption.\n\n");
+
+    ret = pkcs11_init(libName, &session);
+    if (ret != CKR_OK) {
+        printf("Failed to initialize PKCS#11 library\n");
+        return ret;
+    }
 
     ret = create_rsa_keys_and_certs(session);
 
@@ -376,10 +502,32 @@ static CK_RV tpm_memory_test(CK_SESSION_HANDLE session)
         printf("Created %d objects before failure\n", objectCount);
     }
 
-    /* Cleanup objects */
-    printf("\nCleaning up created objects...\n");
-    cleanup_objects(session);
-    printf("Cleanup completed.\n");
+    pkcs11_final(session);
+
+    if (ret == CKR_OK) {
+        printf("re-initializing PKCS#11 library\n");
+        ret = pkcs11_init(libName, &session);
+        if (ret != CKR_OK) {
+            printf("Failed to re-initialize PKCS#11 library\n");
+            return ret;
+        }
+
+        /* Read the created keys and certificates to verify they are accessible */
+        printf("\n=== Reading Created Objects ===\n");
+        ret = read_rsa_keys_and_certs(session);
+        if (ret == CKR_OK) {
+            printf("SUCCESS: All objects read successfully\n");
+        } else {
+            printf("FAILURE: Failed to read objects with error code: 0x%lx\n", ret);
+        }
+
+        /* Cleanup objects */
+        printf("\nCleaning up created objects...\n");
+        cleanup_objects(session);
+        printf("Cleanup completed.\n");
+
+        pkcs11_final(session);
+    }
 
     return ret;
 }
@@ -405,7 +553,6 @@ int tpm_memory_test_main(int argc, char* argv[])
 {
     int ret;
     CK_RV rv;
-    const char* libName = WOLFPKCS11_DLL_FILENAME;
     CK_SESSION_HANDLE session = CK_INVALID_HANDLE;
 
 #ifndef WOLFPKCS11_NO_ENV
@@ -464,11 +611,7 @@ int tpm_memory_test_main(int argc, char* argv[])
     userPinLen = (int)XSTRLEN((const char*)userPin);
     soPinLen = (int)XSTRLEN((const char*)soPin);
 
-    rv = pkcs11_init(libName, &session);
-    if (rv == CKR_OK) {
-        rv = tpm_memory_test(session);
-    }
-    pkcs11_final(session);
+    rv = tpm_memory_test(session);
 
     if (rv == CKR_OK)
         ret = 0;
