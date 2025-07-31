@@ -234,6 +234,7 @@ struct WP11_Object {
     WOLFTPM2_KEYBLOB tpmKey;
 #endif
     CK_KEY_TYPE type;                  /* Key type of this object             */
+    int         id;                    /* identifier assigned at object creation */
     word32 size;                       /* Size of the key in bits or bytes    */
 #ifndef WOLFPKCS11_NO_STORE
     unsigned char* keyData;            /* Encoded key data                    */
@@ -919,6 +920,132 @@ static int wolfPKCS11_Store_GetMaxSize(int type, int variableSz)
 #endif /* WOLFPKCS11_TPM_STORE */
 
 /* Functions that handle storing data. */
+#ifdef WOLFPKCS11_TPM_STORE
+static word32 wolfPKCS11_Store_Handle(int type, CK_ULONG id1, CK_ULONG id2)
+{
+    /* Build unique handle */
+    word32 nvIndex = WOLFPKCS11_TPM_NV_BASE +
+        ((type & 0x0F) << 16) +
+            (((word32)id1 & 0xFF) << 8) +
+             ((word32)id2 & 0xFF);
+    return nvIndex;
+}
+#else
+static int wolfPKCS11_Store_Name(int type, CK_ULONG id1, CK_ULONG id2, char* name,
+    int nameLen)
+{
+    char homePath[47]; /* Must fit within name buffer size limit */
+
+    /* Path order:
+     * 1. Environment variable WOLFPKCS11_TOKEN_PATH
+     * 2. Home directory with .wolfPKCS11 (or APPDIR with wolfPKCS11 for
+     * Windows)
+     * 3. WOLFPKCS11_DEFAULT_TOKEN_PATH, if set
+     * 4. /tmp in Linux, %TEMP% or C:\Windows\Temp in Windows
+     */
+#ifndef WOLFPKCS11_NO_ENV
+    str = XGETENV("WOLFPKCS11_TOKEN_PATH");
+#endif
+
+    if (str == NULL) {
+        const char* homeDir = NULL;
+
+    #if defined(_WIN32) || defined(_MSC_VER)
+        homeDir = XGETENV("%APPDIR%");
+        if (homeDir != NULL && XSTRLEN(homeDir) <= sizeof(homePath) - 13) {
+            int len = XSNPRINTF(homePath, sizeof(homePath), "%s\\wolfPKCS11",
+                                homeDir);
+            if (len > 0 && len < (int)sizeof(homePath)) {
+                str = homePath;
+            }
+         }
+    #else
+        homeDir = XGETENV("HOME");
+        if (homeDir != NULL && XSTRLEN(homeDir) <= sizeof(homePath) - 13) {
+            int len = XSNPRINTF(homePath, sizeof(homePath), "%s/.wolfPKCS11",
+                                homeDir);
+            if (len > 0 && len < (int)sizeof(homePath)) {
+                str = homePath;
+            }
+        }
+    #endif
+    }
+
+#ifdef WOLFPKCS11_DEFAULT_TOKEN_PATH
+    if (str == NULL) {
+        str = WC_STRINGIFY(WOLFPKCS11_DEFAULT_TOKEN_PATH);
+    }
+#else
+    if (str == NULL) {
+    #if defined(_WIN32) || defined(_MSC_VER)
+        str = XGETENV("%TEMP%");
+        if (str == NULL) {
+            str = "C:\\Windows\\Temp";
+        }
+    #else
+        str = "/tmp";
+    #endif
+    }
+#endif
+
+    /* 47 is maximum number of character to a filename and path separator. */
+    if (str == NULL || (XSTRLEN(str) > nameLen - sizeof(homePath))) {
+        return -1;
+    }
+
+    /* Set different filename for each type of data and different ids. */
+    switch (type) {
+        case WOLFPKCS11_STORE_TOKEN:
+            XSNPRINTF(name, nameLen, "%s/wp11_token_%016lx", str, id1);
+            break;
+        case WOLFPKCS11_STORE_OBJECT:
+            XSNPRINTF(name, nameLen, "%s/wp11_obj_%016lx_%016lx", str, id1,
+                    id2);
+            break;
+        case WOLFPKCS11_STORE_SYMMKEY:
+            XSNPRINTF(name, nameLen, "%s/wp11_symmkey_%016lx_%016lx", str,
+                    id1, id2);
+            break;
+        case WOLFPKCS11_STORE_RSAKEY_PRIV:
+            XSNPRINTF(name, nameLen, "%s/wp11_rsakey_priv_%016lx_%016lx",
+                    str, id1, id2);
+            break;
+        case WOLFPKCS11_STORE_RSAKEY_PUB:
+            XSNPRINTF(name, nameLen, "%s/wp11_rsakey_pub_%016lx_%016lx",
+                    str, id1, id2);
+            break;
+        case WOLFPKCS11_STORE_ECCKEY_PRIV:
+            XSNPRINTF(name, nameLen, "%s/wp11_ecckey_priv_%016lx_%016lx",
+                    str, id1, id2);
+            break;
+        case WOLFPKCS11_STORE_ECCKEY_PUB:
+            XSNPRINTF(name, nameLen, "%s/wp11_ecckey_pub_%016lx_%016lx",
+                    str, id1, id2);
+            break;
+        case WOLFPKCS11_STORE_DHKEY_PRIV:
+            XSNPRINTF(name, nameLen, "%s/wp11_dhkey_priv_%016lx_%016lx",
+                    str, id1, id2);
+            break;
+        case WOLFPKCS11_STORE_DHKEY_PUB:
+            XSNPRINTF(name, nameLen, "%s/wp11_dhkey_pub_%016lx_%016lx",
+                    str, id1, id2);
+            break;
+        case WOLFPKCS11_STORE_CERT:
+            XSNPRINTF(name, nameLen, "%s/wp11_cert_%016lx_%016lx",
+                    str, id1, id2);
+            break;
+        case WOLFPKCS11_STORE_TRUST:
+            XSNPRINTF(name, nameLen, "%s/wp11_trust_%016lx_%016lx",
+                    str, id1, id2);
+            break;
+
+        default:
+            ret = -1;
+            break;
+    }
+    return ret;
+}
+#endif
 
 int wolfPKCS11_Store_Remove(int type, CK_ULONG id1, CK_ULONG id2)
 {
@@ -947,10 +1074,7 @@ int wolfPKCS11_Store_Remove(int type, CK_ULONG id1, CK_ULONG id2)
 
 #ifdef WOLFPKCS11_TPM_STORE
     /* Build unique handle */
-    nvIndex = WOLFPKCS11_TPM_NV_BASE +
-                ((type & 0x0F) << 16) +
-         (((word32)id1 & 0xFF) << 8) +
-          ((word32)id2 & 0xFF);
+    nvIndex = wolfPKCS11_Store_Handle(type, id1, id2);
 
     XMEMSET(&parent, 0, sizeof(parent));
     parent.hndl = WOLFPKCS11_TPM_AUTH_TYPE;
@@ -999,7 +1123,6 @@ int wolfPKCS11_Store_OpenSz(int type, CK_ULONG id1, CK_ULONG id2, int read,
 #else
     char name[120] = "\0";
     XFILE file = XBADFILE;
-    char homePath[47]; /* Must fit within name buffer size limit */
 #endif
 
 #ifdef WOLFPKCS11_DEBUG_STORE
@@ -1020,10 +1143,7 @@ int wolfPKCS11_Store_OpenSz(int type, CK_ULONG id1, CK_ULONG id2, int read,
     tpmStore->dev = &slot->tpmDev;
 
     /* Build unique handle */
-    nvIndex = WOLFPKCS11_TPM_NV_BASE +
-                ((type & 0x0F) << 16) +
-         (((word32)id1 & 0xFF) << 8) +
-          ((word32)id2 & 0xFF);
+    nvIndex = wolfPKCS11_Store_Handle(type, id1, id2);
 
     maxSz = wolfPKCS11_Store_GetMaxSize(type, variableSz);
     if (maxSz <= 0) {
@@ -1074,114 +1194,8 @@ int wolfPKCS11_Store_OpenSz(int type, CK_ULONG id1, CK_ULONG id2, int read,
     #endif
 
 #else
-    /* Path order:
-     * 1. Environment variable WOLFPKCS11_TOKEN_PATH
-     * 2. Home directory with .wolfPKCS11 (or APPDIR with wolfPKCS11 for
-     * Windows)
-     * 3. WOLFPKCS11_DEFAULT_TOKEN_PATH, if set
-     * 4. /tmp in Linux, %TEMP% or C:\Windows\Temp in Windows
-     */
-    #ifndef WOLFPKCS11_NO_ENV
-    str = XGETENV("WOLFPKCS11_TOKEN_PATH");
-    #endif
-
-    if (str == NULL) {
-        const char* homeDir = NULL;
-
-        #if defined(_WIN32) || defined(_MSC_VER)
-        homeDir = XGETENV("%APPDIR%");
-        if (homeDir != NULL && XSTRLEN(homeDir) <= sizeof(homePath) - 13) {
-            int len = XSNPRINTF(homePath, sizeof(homePath), "%s\\wolfPKCS11",
-                               homeDir);
-            if (len > 0 && len < (int)sizeof(homePath)) {
-                str = homePath;
-            }
-        }
-        #else
-        homeDir = XGETENV("HOME");
-        if (homeDir != NULL && XSTRLEN(homeDir) <= sizeof(homePath) - 13) {
-            int len = XSNPRINTF(homePath, sizeof(homePath), "%s/.wolfPKCS11",
-                               homeDir);
-            if (len > 0 && len < (int)sizeof(homePath)) {
-                str = homePath;
-            }
-        }
-        #endif
-    }
-
-    #ifdef WOLFPKCS11_DEFAULT_TOKEN_PATH
-    if (str == NULL) {
-        str = WC_STRINGIFY(WOLFPKCS11_DEFAULT_TOKEN_PATH);
-    }
-    #else
-    if (str == NULL) {
-        #if defined(_WIN32) || defined(_MSC_VER)
-        str = XGETENV("%TEMP%");
-        if (str == NULL) {
-            str = "C:\\Windows\\Temp";
-        }
-        #else
-        str = "/tmp";
-        #endif
-    }
-    #endif
-
-
-    /* 47 is maximum number of character to a filename and path separator. */
-    if (str == NULL || (XSTRLEN(str) > sizeof(name) - 47)) {
-       return -1;
-    }
-
-    /* Set different filename for each type of data and different ids. */
-    switch (type) {
-        case WOLFPKCS11_STORE_TOKEN:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_token_%016lx", str, id1);
-            break;
-        case WOLFPKCS11_STORE_OBJECT:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_obj_%016lx_%016lx", str, id1,
-                      id2);
-            break;
-        case WOLFPKCS11_STORE_SYMMKEY:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_symmkey_%016lx_%016lx", str,
-                      id1, id2);
-            break;
-        case WOLFPKCS11_STORE_RSAKEY_PRIV:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_rsakey_priv_%016lx_%016lx",
-                      str, id1, id2);
-            break;
-        case WOLFPKCS11_STORE_RSAKEY_PUB:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_rsakey_pub_%016lx_%016lx",
-                      str, id1, id2);
-            break;
-        case WOLFPKCS11_STORE_ECCKEY_PRIV:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_ecckey_priv_%016lx_%016lx",
-                      str, id1, id2);
-            break;
-        case WOLFPKCS11_STORE_ECCKEY_PUB:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_ecckey_pub_%016lx_%016lx",
-                      str, id1, id2);
-            break;
-        case WOLFPKCS11_STORE_DHKEY_PRIV:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_dhkey_priv_%016lx_%016lx",
-                      str, id1, id2);
-            break;
-        case WOLFPKCS11_STORE_DHKEY_PUB:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_dhkey_pub_%016lx_%016lx",
-                      str, id1, id2);
-            break;
-        case WOLFPKCS11_STORE_CERT:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_cert_%016lx_%016lx",
-                      str, id1, id2);
-            break;
-        case WOLFPKCS11_STORE_TRUST:
-            XSNPRINTF(name, sizeof(name), "%s/wp11_trust_%016lx_%016lx",
-                      str, id1, id2);
-            break;
-
-        default:
-            ret = -1;
-            break;
-    }
+    /* build filename */
+    ret = wolfPKCS11_Store_Name(type, id1, id2, name, sizeof(name));
 
     /* Open file for read or write. */
     if (ret == 0) {
