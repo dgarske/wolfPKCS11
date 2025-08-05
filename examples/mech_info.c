@@ -42,11 +42,11 @@
 
 #ifdef DEBUG_WOLFPKCS11
     #define CHECK_CKR(rv, op)                       \
-        fprintf(stderr, "%s: %ld\n", op, rv)
+        printf("%s: %ld\n", op, rv)
 #else
     #define CHECK_CKR(rv, op)                       \
         if (ret != CKR_OK)                          \
-            fprintf(stderr, "%s: %ld\n", op, rv)
+            printf("%s: %ld\n", op, rv)
 #endif
 
 
@@ -82,14 +82,14 @@ static CK_RV pkcs11_init(const char* library)
 
     dlib = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (dlib == NULL) {
-        fprintf(stderr, "dlopen error: %s\n", dlerror());
+        printf("dlopen error: %s\n", dlerror());
         ret = -1;
     }
 
     if (ret == CKR_OK) {
         func = (void*)(CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
         if (func == NULL) {
-            fprintf(stderr, "Failed to get function list function\n");
+            printf("Failed to get function list function\n");
             ret = -1;
         }
     }
@@ -369,7 +369,7 @@ int mech_info(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Library name not supplied\n");
+                printf("Library name not supplied\n");
                 return 1;
             }
             libName = *argv;
@@ -378,13 +378,13 @@ int mech_info(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Slot number not supplied\n");
+                printf("Slot number not supplied\n");
                 return 1;
             }
             slot = atoi(*argv);
         }
         else {
-            fprintf(stderr, "Unrecognized command line argument\n  %s\n",
+            printf("Unrecognized command line argument\n  %s\n",
                 argv[0]);
             return 1;
         }

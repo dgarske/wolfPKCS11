@@ -49,11 +49,11 @@
 
 #ifdef DEBUG_WOLFPKCS11
     #define CHECK_CKR(rv, op)                      \
-        fprintf(stderr, "%s: %ld\n", op, rv)
+        printf("%s: %ld\n", op, rv)
 #else
     #define CHECK_CKR(rv, op)                      \
         if (ret != CKR_OK)                         \
-            fprintf(stderr, "%s: %ld\n", op, rv)
+            printf("%s: %ld\n", op, rv)
 #endif
 
 
@@ -88,14 +88,14 @@ static CK_RV pkcs11_init(const char* library, CK_SESSION_HANDLE* session)
 
     dlib = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (dlib == NULL) {
-        fprintf(stderr, "dlopen error: %s\n", dlerror());
+        printf("dlopen error: %s\n", dlerror());
         ret = -1;
     }
 
     if (ret == CKR_OK) {
         func = (void*)(CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
         if (func == NULL) {
-            fprintf(stderr, "Failed to get function list function\n");
+            printf("Failed to get function list function\n");
             ret = -1;
         }
     }
@@ -236,7 +236,7 @@ int add_rsa_key(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Library name not supplied\n");
+                printf("Library name not supplied\n");
                 return 1;
             }
             libName = *argv;
@@ -245,7 +245,7 @@ int add_rsa_key(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Slot number not supplied\n");
+                printf("Slot number not supplied\n");
                 return 1;
             }
             slot = atoi(*argv);
@@ -254,7 +254,7 @@ int add_rsa_key(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "User PIN not supplied\n");
+                printf("User PIN not supplied\n");
                 return 1;
             }
             userPin = (byte*)*argv;
@@ -263,14 +263,14 @@ int add_rsa_key(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Private key identifier not supplied\n");
+                printf("Private key identifier not supplied\n");
                 return 1;
             }
             privId = (unsigned char*)*argv;
             privIdLen = (int)strlen(*argv);
         }
         else {
-            fprintf(stderr, "Unrecognized command line argument\n  %s\n",
+            printf("Unrecognized command line argument\n  %s\n",
                 argv[0]);
             return 1;
         }
@@ -305,9 +305,9 @@ int add_rsa_key(int argc, char* argv[])
     (void)argc;
     (void)argv;
 #ifdef WOLFPKCS11_NO_STORE
-    fprintf(stderr, "Store disabled\n");
+    printf("Store disabled\n");
 #else
-    fprintf(stderr, "RSA disabled\n");
+    printf("RSA disabled\n");
 #endif
     return 0;
 }

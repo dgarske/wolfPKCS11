@@ -2,7 +2,7 @@ name: wolfPKCS11 Alpine Architecture Tests
 
 on:
   push:
-    branches: [ 'master', 'main' ]
+    branches: [ '*' ]
   pull_request:
     branches: [ '*' ]
 
@@ -87,7 +87,7 @@ jobs:
         path: |
           ibmswtpm2-${{ matrix.alpine_arch }}
           wolftpm-${{ matrix.alpine_arch }}
-        key: alpine-tpm-components-${{ matrix.alpine_arch }}-v1
+        key: alpine-tpm-components-${{ matrix.alpine_arch }}-v2
 
     - name: Setup IBM Software TPM
       if: matrix.tpm == 'with-tpm' && steps.cache-tpm.outputs.cache-hit != 'true'
@@ -152,7 +152,7 @@ jobs:
         echo "Running autogen.sh..."
         ./autogen.sh
         echo "Running configure..."
-        ./configure --enable-singlethreaded --enable-wolftpm --disable-dh C_EXTRA_FLAGS="-DWOLFPKCS11_TPM_STORE"
+        ./configure --enable-singlethreaded --enable-wolftpm --disable-dh C_EXTRA_FLAGS="-DWOLFPKCS11_TPM_STORE -DDEBUG_WOLFPKCS11"
         make
       shell: alpine.sh {0}
 
@@ -169,7 +169,7 @@ jobs:
       run: |
         echo "=== Running TPM tests on ${{ matrix.arch }} ==="
         export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
-        ./tests/pkcs11str && ./tests/pkcs11test && ./tests/rsa_session_persistence_test
+        ./tests/pkcs11str && ./tests/pkcs11test -v && ./tests/rsa_session_persistence_test
       shell: alpine.sh {0}
 
     - name: Cleanup TPM server

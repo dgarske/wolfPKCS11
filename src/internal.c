@@ -575,7 +575,7 @@ static int WP11_Lock_LockRW(WP11_Lock* lock)
 
     ret = wc_LockMutex(&lock->write);
 #ifdef DEBUG_LOCK
-    fprintf(stderr, "LRW: %p - %d\n", &lock->write, lock->cnt);
+    printf("LRW: %p - %d\n", &lock->write, lock->cnt);
 #endif
 
     return ret;
@@ -593,7 +593,7 @@ static int WP11_Lock_UnlockRW(WP11_Lock* lock)
     int ret;
 
 #ifdef DEBUG_LOCK
-    fprintf(stderr, "URW: %p - %d\n", &lock->write, lock->cnt);
+    printf("URW: %p - %d\n", &lock->write, lock->cnt);
 #endif
     ret = wc_UnLockMutex(&lock->write);
     if (ret != 0)
@@ -618,7 +618,7 @@ static int WP11_Lock_LockRO(WP11_Lock* lock)
         if (++lock->cnt == 1)
             ret = wc_LockMutex(&lock->write);
 #ifdef DEBUG_LOCK
-        fprintf(stderr, "LRO: %p - %d\n", &lock->write, lock->cnt);
+        printf("LRO: %p - %d\n", &lock->write, lock->cnt);
 #endif
     }
     if (ret == 0)
@@ -645,7 +645,7 @@ static int WP11_Lock_UnlockRO(WP11_Lock* lock)
         if (--lock->cnt == 0)
             ret = wc_UnLockMutex(&lock->write);
 #ifdef DEBUG_LOCK
-        fprintf(stderr, "URO: %p - %d\n", &lock->write, lock->cnt);
+        printf("URO: %p - %d\n", &lock->write, lock->cnt);
 #endif
     }
     if (ret == 0)
@@ -2892,27 +2892,27 @@ static int wp11_maxq10xx_store_cert(int objId, byte *data, word32 len)
 
     ret = ParseCert(&decodedCert, CERT_TYPE, NO_VERIFY, NULL);
     #ifdef WOLFPKCS11_DEBUG_STORE
-    fprintf(stderr, "ParseCert returned %d\n", ret);
+    printf("ParseCert returned %d\n", ret);
     #endif
 
     if (ret == 0) {
         if (decodedCert.signatureOID != CTC_SHA256wECDSA) {
             #ifdef WOLFPKCS11_DEBUG_STORE
-            fprintf(stderr, "MAXQ: signature algo not supported\n");
+            printf("MAXQ: signature algo not supported\n");
             #endif
             ret = BAD_FUNC_ARG;
         }
 
         if (decodedCert.keyOID != ECDSAk) {
             #ifdef WOLFPKCS11_DEBUG_STORE
-            fprintf(stderr, "MAXQ: key algo not supported\n");
+            printf("MAXQ: key algo not supported\n");
             #endif
             ret = BAD_FUNC_ARG;
         }
 
         if (decodedCert.pkCurveOID != ECC_SECP256R1_OID) {
             #ifdef WOLFPKCS11_DEBUG_STORE
-            fprintf(stderr, "MAXQ: key curve not supported\n");
+            printf("MAXQ: key curve not supported\n");
             #endif
             ret = BAD_FUNC_ARG;
         }
@@ -2927,7 +2927,7 @@ static int wp11_maxq10xx_store_cert(int objId, byte *data, word32 len)
             decodedCert.maxIdx, 0, 0, uu1, aa1, uu2, aa2, certBody);
         if (mxq_rc) {
             #ifdef WOLFPKCS11_DEBUG_STORE
-            fprintf(stderr, "MAXQ: MXQ_Build_EC_Cert failure\n");
+            printf("MAXQ: MXQ_Build_EC_Cert failure\n");
             #endif
             ret = WC_HW_E;
         }
@@ -2938,7 +2938,7 @@ static int wp11_maxq10xx_store_cert(int objId, byte *data, word32 len)
             dest, destlen, sign_key_curve);
         if (ret != 0) {
             #ifdef WOLFPKCS11_DEBUG_STORE
-            fprintf(stderr, "MAXQ: wolfssl signing failure\n");
+            printf("MAXQ: wolfssl signing failure\n");
             #endif
         }
     }
@@ -2948,7 +2948,7 @@ static int wp11_maxq10xx_store_cert(int objId, byte *data, word32 len)
             dest, destlen, signature, signature_len);
         if (mxq_rc) {
             #ifdef WOLFPKCS11_DEBUG_STORE
-            fprintf(stderr, "MAXQ: MXQ_ImportRootCert failure\n");
+            printf("MAXQ: MXQ_ImportRootCert failure\n");
             #endif
             ret = WC_HW_E;
         }
@@ -10415,6 +10415,9 @@ static word32 Pkcs11ECDSASig_Encode(byte* sig, word32 sigSz, byte* encSig)
     if (sHigh)
         encSig[i] = 0x00;
 
+    printf("Pkcs11ECDSASig_Encode: seqLen %d, sigSz %d, rHigh %d, sHigh %d, i %d\n",
+        seqLen, sigSz, rHigh, sHigh, i);
+
     return seqLen + sigSz;
 }
 
@@ -10433,7 +10436,7 @@ static int Pkcs11ECDSASig_Decode(const byte* in, word32 inSz, byte* sig,
 {
     int ret = 0;
     word32 i = 0;
-    int len, seqLen = 2;
+    int len = 0, seqLen = 2;
 
     /* Make sure zeros in place when decoding short integers. */
     XMEMSET(sig, 0, sz * 2);
@@ -10495,6 +10498,9 @@ static int Pkcs11ECDSASig_Decode(const byte* in, word32 inSz, byte* sig,
         XMEMCPY(sig + sz + sz - len, in + i, len);
     }
 
+    printf("Pkcs11ECDSASig_Decode: ret %d, i %d, len %d, inSz %d, sz %d\n",
+        ret, i, len, inSz, sz);
+
     return ret;
 }
 
@@ -10536,10 +10542,14 @@ int WP11_Ec_Sign(unsigned char* hash, word32 hashLen, unsigned char* sig,
     if (priv->onToken)
         WP11_Lock_LockRO(priv->lock);
     ordSz = priv->data.ecKey->dp->size;
+
+    printf("WP11_Ec_Sign: ECC_MAX_SIG_SIZE %d, sizeof(WC_RNG) %d, ordSz %d\n",
+        ECC_MAX_SIG_SIZE, (int)sizeof(WC_RNG), ordSz);
+
     if (priv->onToken)
         WP11_Lock_UnlockRO(priv->lock);
 
-    if (*sigLen < ordSz * 2)
+    if (*sigLen < ordSz * 2 || ordSz * 2 > ECC_MAX_SIG_SIZE)
         ret = BUFFER_E;
     if (ret == 0) {
         encSigLen = sizeof(encSig);

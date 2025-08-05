@@ -49,7 +49,7 @@
 #define CHECK_COND(cond, ret, msg)                                         \
     do {                                                                   \
         if (!(cond)) {                                                     \
-            fprintf(stderr, "\n%s:%d - %s - FAIL\n",                       \
+            printf("\n%s:%d - %s - FAIL\n",                       \
                     __FILE__, __LINE__, msg);                              \
             ret = -1;                                                      \
         }                                                                  \
@@ -58,7 +58,7 @@
 #define CHECK_CKR(rv, msg)                                                 \
     do {                                                                   \
         if (rv != CKR_OK) {                                                \
-            fprintf(stderr, "\n%s:%d - %s: %lx - FAIL\n",                  \
+            printf("\n%s:%d - %s: %lx - FAIL\n",                  \
                     __FILE__, __LINE__, msg, rv);                          \
         }                                                                  \
     }                                                                      \
@@ -66,7 +66,7 @@
 #define CHECK_CKR_FAIL(rv, exp, msg)                                       \
     do {                                                                   \
         if (rv != exp) {                                                   \
-            fprintf(stderr, "\n%s:%d - %s RETURNED %lx - FAIL\n",          \
+            printf("\n%s:%d - %s RETURNED %lx - FAIL\n",          \
                     __FILE__, __LINE__, msg, rv);                          \
             if (rv == CKR_OK)                                              \
                 rv = -1;                                                   \
@@ -169,13 +169,13 @@ static CK_RV pkcs11_init(void)
 #ifndef HAVE_PKCS11_STATIC
     dlib = dlopen(WOLFPKCS11_DLL_FILENAME, RTLD_NOW | RTLD_LOCAL);
     if (dlib == NULL) {
-        fprintf(stderr, "dlopen error: %s\n", dlerror());
+        printf("dlopen error: %s\n", dlerror());
         return -1;
     }
 
     func = (CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
     if (func == NULL) {
-        fprintf(stderr, "Failed to get function list function\n");
+        printf("Failed to get function list function\n");
         dlclose(dlib);
         return -1;
     }
@@ -185,13 +185,13 @@ static CK_RV pkcs11_init(void)
     ret = C_GetFunctionList(&funcList);
 #endif
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to get function list\n");
+        printf("Failed to get function list\n");
         return ret;
     }
 
     ret = funcList->C_Initialize(&args);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to initialize PKCS#11\n");
+        printf("Failed to initialize PKCS#11\n");
         return ret;
     }
 
@@ -209,7 +209,7 @@ static CK_RV pkcs11_init(void)
     if (ret == CKR_OK && slotCount > 0) {
         slot = slotList[0];  /* Use first available slot */
     } else if (ret == CKR_OK) {
-        fprintf(stderr, "No slots available\n");
+        printf("No slots available\n");
         ret = CKR_GENERAL_ERROR;
     }
 
@@ -369,28 +369,28 @@ static CK_RV object_id_uniqueness_test(void)
     /* Step 1: Initialize PKCS#11 */
     ret = pkcs11_init();
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to initialize PKCS#11\n");
+        printf("Failed to initialize PKCS#11\n");
         return ret;
     }
 
     /* Step 1a: Initialize token */
     ret = pkcs11_init_token();
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to initialize token\n");
+        printf("Failed to initialize token\n");
         goto cleanup;
     }
 
     /* Step 1b: Set user PIN */
     ret = pkcs11_set_user_pin();
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to set user PIN\n");
+        printf("Failed to set user PIN\n");
         goto cleanup;
     }
 
     /* Step 2: Open session and create first token data object */
     ret = pkcs11_open_session(&session1);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to open first session\n");
+        printf("Failed to open first session\n");
         goto cleanup;
     }
 
@@ -398,7 +398,7 @@ static CK_RV object_id_uniqueness_test(void)
     ret = create_token_cert_object(session1, testCert1, sizeof(testCert1),
                                    testLabel1, &obj1);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to create first token certificate object\n");
+        printf("Failed to create first token certificate object\n");
         goto cleanup;
     }
 
@@ -413,14 +413,14 @@ static CK_RV object_id_uniqueness_test(void)
     printf("Re-initializing PKCS#11...\n");
     ret = pkcs11_init();
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to re-initialize PKCS#11\n");
+        printf("Failed to re-initialize PKCS#11\n");
         return ret;
     }
 
     /* Step 5: Open new session and create second token data object */
     ret = pkcs11_open_session(&session2);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to open second session\n");
+        printf("Failed to open second session\n");
         goto cleanup;
     }
 
@@ -428,7 +428,7 @@ static CK_RV object_id_uniqueness_test(void)
     ret = create_token_cert_object(session2, testCert2, sizeof(testCert2),
                                    testLabel2, &obj2);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to create second token certificate object\n");
+        printf("Failed to create second token certificate object\n");
         goto cleanup;
     }
 
@@ -438,7 +438,7 @@ static CK_RV object_id_uniqueness_test(void)
     printf("Finding all token objects...\n");
     ret = find_all_objects(session2, foundObjects, &foundCount);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to find objects\n");
+        printf("Failed to find objects\n");
         goto cleanup;
     }
 
@@ -453,8 +453,8 @@ static CK_RV object_id_uniqueness_test(void)
     for (CK_ULONG i = 0; i < foundCount; i++) {
         for (CK_ULONG j = i + 1; j < foundCount; j++) {
             if (foundObjects[i] == foundObjects[j]) {
-                fprintf(stderr, "ERROR: Objects have duplicate handles!\n");
-                fprintf(stderr,
+                printf("ERROR: Objects have duplicate handles!\n");
+                printf(
                         "  Object %lu and Object %lu both have handle=0x%lx\n",
                         i + 1, j + 1, foundObjects[i]);
                 ret = CKR_GENERAL_ERROR;
@@ -465,7 +465,7 @@ static CK_RV object_id_uniqueness_test(void)
 
     /* Step 8: Verify we have at least 2 objects */
     if (foundCount < 2) {
-        fprintf(stderr, "ERROR: Expected at least 2 objects, but found %lu\n",
+        printf("ERROR: Expected at least 2 objects, but found %lu\n",
                 foundCount);
         ret = CKR_GENERAL_ERROR;
         goto cleanup;

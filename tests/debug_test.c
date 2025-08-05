@@ -49,13 +49,14 @@ void (*wolfPKCS11_Debugging_Off_fp)(void) = NULL;
 
 static CK_FUNCTION_LIST_PTR pFunctionList = NULL;
 
-static FILE* original_stdout = NULL;
+static int original_stdout;
 static FILE* capture_file = NULL;
 
 static void setup_output_capture(void)
 {
-    original_stdout = stdout;
+    original_stdout = dup(STDOUT_FILENO);
     capture_file = tmpfile();
+    
     if (capture_file) {
         stdout = capture_file;
     }
@@ -70,7 +71,7 @@ static int check_debug_output(void)
         return 0;
     }
 
-    stdout = original_stdout;
+    dup2(original_stdout, STDOUT_FILENO);
     rewind(capture_file);
 
     while (fgets(buffer, sizeof(buffer), capture_file)) {
@@ -114,13 +115,13 @@ static CK_RV debug_init(const char* library) {
 
     dlib = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (dlib == NULL) {
-        fprintf(stderr, "dlopen error: %s\n", dlerror());
+        printf("dlopen error: %s\n", dlerror());
         return -1;
     }
 
     func = (void*)(CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
     if (func == NULL) {
-        fprintf(stderr, "Failed to get function list function\n");
+        printf("Failed to get function list function\n");
         dlclose(dlib);
         return -1;
     }

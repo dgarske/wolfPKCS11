@@ -55,7 +55,7 @@
 #define CHECK_COND(cond, ret, msg)                                         \
     do {                                                                   \
         if (!(cond)) {                                                     \
-            fprintf(stderr, "\n%s:%d - %s - FAIL\n",                       \
+            printf("\n%s:%d - %s - FAIL\n",                       \
                     __FILE__, __LINE__, msg);                              \
             ret = -1;                                                      \
         }                                                                  \
@@ -64,7 +64,7 @@
 #define CHECK_CKR(rv, msg)                                                 \
     do {                                                                   \
         if (rv != CKR_OK) {                                                \
-            fprintf(stderr, "\n%s:%d - %s: %lx - FAIL\n",                  \
+            printf("\n%s:%d - %s: %lx - FAIL\n",                  \
                     __FILE__, __LINE__, msg, rv);                          \
         }                                                                  \
     }                                                                      \
@@ -72,7 +72,7 @@
 #define CHECK_CKR_FAIL(rv, exp, msg)                                       \
     do {                                                                   \
         if (rv != exp) {                                                   \
-            fprintf(stderr, "\n%s:%d - %s RETURNED %lx - FAIL\n",          \
+            printf("\n%s:%d - %s RETURNED %lx - FAIL\n",          \
                     __FILE__, __LINE__, msg, rv);                          \
             if (rv == CKR_OK)                                              \
                 rv = -1;                                                   \
@@ -137,27 +137,27 @@ static CK_RV pkcs11_init(void)
 
     dlib = dlopen(WOLFPKCS11_DLL_FILENAME, RTLD_NOW | RTLD_LOCAL);
     if (dlib == NULL) {
-        fprintf(stderr, "dlopen error: %s\n", dlerror());
+        printf("dlopen error: %s\n", dlerror());
         return -1;
     }
 
     func = (CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
     if (func == NULL) {
-        fprintf(stderr, "Failed to get function list function\n");
+        printf("Failed to get function list function\n");
         dlclose(dlib);
         return -1;
     }
 
     ret = func(&funcList);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to get function list: %lx\n", ret);
+        printf("Failed to get function list: %lx\n", ret);
         dlclose(dlib);
         return ret;
     }
 #else
     ret = C_GetFunctionList(&funcList);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to get function list: %lx\n", ret);
+        printf("Failed to get function list: %lx\n", ret);
         return ret;
     }
 #endif
@@ -181,7 +181,7 @@ static CK_RV pkcs11_init(void)
     if (ret == CKR_OK && slotCount > 0) {
         slot = slotList[0];  /* Use first available slot */
     } else if (ret == CKR_OK) {
-        fprintf(stderr, "No slots available\n");
+        printf("No slots available\n");
         ret = CKR_GENERAL_ERROR;
     }
 
@@ -404,7 +404,7 @@ static CK_RV find_rsa_key_pair(CK_SESSION_HANDLE session,
     }
 
     if (ret == CKR_OK && count != 1) {
-        fprintf(stderr, "Expected 1 public key, found %lu\n", count);
+        printf("Expected 1 public key, found %lu\n", count);
         return CKR_OBJECT_HANDLE_INVALID;
     }
 
@@ -426,7 +426,7 @@ static CK_RV find_rsa_key_pair(CK_SESSION_HANDLE session,
     }
 
     if (ret == CKR_OK && count != 1) {
-        fprintf(stderr, "Expected 1 private key, found %lu\n", count);
+        printf("Expected 1 private key, found %lu\n", count);
         return CKR_OBJECT_HANDLE_INVALID;
     }
 
@@ -488,7 +488,7 @@ static CK_RV rsa_encrypt_decrypt_test(CK_SESSION_HANDLE session,
     if (ret == CKR_OK) {
         if (decLen != sizeof(testPlaintext) ||
             XMEMCMP(decrypted, testPlaintext, decLen) != 0) {
-            fprintf(stderr, "Decrypted data doesn't match original\n");
+            printf("Decrypted data doesn't match original\n");
             ret = CKR_GENERAL_ERROR;
         }
     }
@@ -510,35 +510,35 @@ static CK_RV rsa_session_persistence_test(void)
     /* Step 1: Initialize PKCS#11 */
     ret = pkcs11_init();
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to initialize PKCS#11\n");
+        printf("Failed to initialize PKCS#11\n");
         return ret;
     }
 
     /* Step 1a: Initialize token */
     ret = pkcs11_init_token();
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to initialize token\n");
+        printf("Failed to initialize token\n");
         goto cleanup;
     }
 
     /* Step 1b: Set user PIN */
     ret = pkcs11_set_user_pin();
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to set user PIN\n");
+        printf("Failed to set user PIN\n");
         goto cleanup;
     }
 
     /* Step 2: Open session and create RSA key pair */
     ret = pkcs11_open_session(&session1);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to open first session\n");
+        printf("Failed to open first session\n");
         goto cleanup;
     }
 
     printf("Creating RSA key pair...\n");
     ret = create_rsa_key_pair(session1, &pubKey1, &privKey1);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to create RSA key pair\n");
+        printf("Failed to create RSA key pair\n");
         goto cleanup;
     }
 
@@ -546,7 +546,7 @@ static CK_RV rsa_session_persistence_test(void)
     printf("Signing hash (first time)...\n");
     ret = rsa_sign_test(session1, privKey1, signature1, &sig1Len);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to sign hash (first time)\n");
+        printf("Failed to sign hash (first time)\n");
         goto cleanup;
     }
 
@@ -554,7 +554,7 @@ static CK_RV rsa_session_persistence_test(void)
     printf("Testing encrypt/decrypt (first time)...\n");
     ret = rsa_encrypt_decrypt_test(session1, pubKey1, privKey1);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed encrypt/decrypt test (first time)\n");
+        printf("Failed encrypt/decrypt test (first time)\n");
         goto cleanup;
     }
 
@@ -567,7 +567,7 @@ static CK_RV rsa_session_persistence_test(void)
     printf("Re-initializing PKCS#11...\n");
     ret = pkcs11_init();
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to re-initialize PKCS#11\n");
+        printf("Failed to re-initialize PKCS#11\n");
         return ret;
     }
 
@@ -576,14 +576,14 @@ static CK_RV rsa_session_persistence_test(void)
     /* Step 7: Open new session and find existing key pair */
     ret = pkcs11_open_session(&session2);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to open second session\n");
+        printf("Failed to open second session\n");
         goto cleanup;
     }
 
     printf("Finding existing RSA key pair...\n");
     ret = find_rsa_key_pair(session2, &pubKey2, &privKey2);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to find RSA key pair after reinit\n");
+        printf("Failed to find RSA key pair after reinit\n");
         goto cleanup;
     }
 
@@ -591,26 +591,26 @@ static CK_RV rsa_session_persistence_test(void)
     printf("Signing hash (second time)...\n");
     ret = rsa_sign_test(session2, privKey2, signature2, &sig2Len);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to sign hash (second time)\n");
+        printf("Failed to sign hash (second time)\n");
         goto cleanup;
     }
 
     /* Step 9: Compare signatures */
     printf("Comparing signatures...\n");
     if (sig1Len != sig2Len || XMEMCMP(signature1, signature2, sig1Len) != 0) {
-        fprintf(stderr, "ERROR: Signatures differ after session reinit!\n");
-        fprintf(stderr, "First signature length: %lu\n", sig1Len);
-        fprintf(stderr, "Second signature length: %lu\n", sig2Len);
+        printf("ERROR: Signatures differ after session reinit!\n");
+        printf("First signature length: %lu\n", sig1Len);
+        printf("Second signature length: %lu\n", sig2Len);
         if (verbose) {
-            fprintf(stderr, "First signature: ");
+            printf("First signature: ");
             for (CK_ULONG i = 0; i < sig1Len; i++) {
-                fprintf(stderr, "%02x", signature1[i]);
+                printf("%02x", signature1[i]);
             }
-            fprintf(stderr, "\nSecond signature: ");
+            printf("\nSecond signature: ");
             for (CK_ULONG i = 0; i < sig2Len; i++) {
-                fprintf(stderr, "%02x", signature2[i]);
+                printf("%02x", signature2[i]);
             }
-            fprintf(stderr, "\n");
+            printf("\n");
         }
         ret = CKR_GENERAL_ERROR;
         goto cleanup;
@@ -620,7 +620,7 @@ static CK_RV rsa_session_persistence_test(void)
     printf("Testing encrypt/decrypt (second time)...\n");
     ret = rsa_encrypt_decrypt_test(session2, pubKey2, privKey2);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed encrypt/decrypt test (second time)\n");
+        printf("Failed encrypt/decrypt test (second time)\n");
         goto cleanup;
     }
 

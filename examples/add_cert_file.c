@@ -43,11 +43,11 @@
 
 #ifdef DEBUG_WOLFPKCS11
     #define CHECK_CKR(rv, op)                       \
-        fprintf(stderr, "%s: %ld\n", op, rv)
+        printf("%s: %ld\n", op, rv)
 #else
     #define CHECK_CKR(rv, op)                       \
         if (ret != CKR_OK)                          \
-            fprintf(stderr, "%s: %ld\n", op, rv)
+            printf("%s: %ld\n", op, rv)
 #endif
 
 
@@ -86,14 +86,14 @@ static CK_RV pkcs11_init(const char* library, CK_SESSION_HANDLE* session)
 
     dlib = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (dlib == NULL) {
-        fprintf(stderr, "dlopen error: %s\n", dlerror());
+        printf("dlopen error: %s\n", dlerror());
         ret = -1;
     }
 
     if (ret == CKR_OK) {
         func = (void*)(CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
         if (func == NULL) {
-            fprintf(stderr, "Failed to get function list function\n");
+            printf("Failed to get function list function\n");
             ret = -1;
         }
     }
@@ -154,34 +154,34 @@ static CK_RV load_cert(char* filename, unsigned char **certData,
 
     file = XFOPEN(filename, "r");
     if (file == XBADFILE) {
-        fprintf(stderr, "Unable to open file: %s\n", filename);
+        printf("Unable to open file: %s\n", filename);
         ret = 1;
     }
     if (ret == 0) {
         XFSEEK(file, 0, XSEEK_END);
         len = (int)XFTELL(file);
         if (len == 0) {
-            fprintf(stderr, "File: %s is empty\n", filename);
+            printf("File: %s is empty\n", filename);
             ret = 1;
         }
     }
     if (ret == 0) {
         if (XFSEEK(file, 0, XSEEK_SET) != 0) {
-            fprintf(stderr, "Error seeking file: %s\n", filename);
+            printf("Error seeking file: %s\n", filename);
             ret = 1;
         }
     }
     if (ret == 0) {
         buffer = (unsigned char *)XMALLOC(len + 1, NULL, DYNAMIC_TYPE_FILE);
         if (buffer == NULL) {
-            fprintf(stderr, "Malloc error on %d bytes\n", len);
+            printf("Malloc error on %d bytes\n", len);
             ret = 1;
         }
     }
     if (ret == 0) {
         len = (int)XFREAD(buffer, 1, len, file);
         if (len <= 0) {
-            fprintf(stderr, ": %s\n", filename);
+            printf(": %s\n", filename);
             ret = 1;
         }
 
@@ -296,7 +296,7 @@ int add_cert(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Library name not supplied\n");
+                printf("Library name not supplied\n");
                 return 1;
             }
             libName = *argv;
@@ -305,7 +305,7 @@ int add_cert(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Slot number not supplied\n");
+                printf("Slot number not supplied\n");
                 return 1;
             }
             slot = atoi(*argv);
@@ -314,7 +314,7 @@ int add_cert(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "User PIN not supplied\n");
+                printf("User PIN not supplied\n");
                 return 1;
             }
             userPin = (byte*)*argv;
@@ -323,7 +323,7 @@ int add_cert(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Certificate identifier not supplied\n");
+                printf("Certificate identifier not supplied\n");
                 return 1;
             }
             privId = (unsigned char*)*argv;
@@ -333,7 +333,7 @@ int add_cert(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Label not supplied\n");
+                printf("Label not supplied\n");
                 return 1;
             }
             label = (char*)*argv;
@@ -342,13 +342,13 @@ int add_cert(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Certificate filename not supplied\n");
+                printf("Certificate filename not supplied\n");
                 return 1;
             }
             filename = (char*)*argv;
         }
         else {
-            fprintf(stderr, "Unrecognized command line argument\n  %s\n",
+            printf("Unrecognized command line argument\n  %s\n",
                 argv[0]);
             return 1;
         }
@@ -358,7 +358,7 @@ int add_cert(int argc, char* argv[])
     }
 
     if (filename == NULL) {
-        fprintf(stderr, "Must specify certificate filename!\n");
+        printf("Must specify certificate filename!\n");
         return 1;
     }
 
@@ -393,7 +393,7 @@ int add_cert(int argc, char* argv[])
 {
     (void)argc;
     (void)argv;
-    fprintf(stderr, "Store disabled\n");
+    printf("Store disabled\n");
     return 0;
 }
 

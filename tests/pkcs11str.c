@@ -46,16 +46,16 @@ int verbose = 0;
 #define CHECK_COND(cond, ret, msg)                                         \
     do {                                                                   \
         if (verbose) {                                                     \
-            fprintf(stderr, "%s:%d - %s - ", __FILE__, __LINE__, msg);     \
+            printf("%s:%d - %s - ", __FILE__, __LINE__, msg);     \
             if (!(cond)) {                                                 \
-                fprintf(stderr, "FAIL\n");                                 \
+                printf("FAIL\n");                                 \
                 ret = -1;                                                  \
             }                                                              \
             else                                                           \
-                fprintf(stderr, "PASS\n");                                 \
+                printf("PASS\n");                                 \
         }                                                                  \
         else if (!(cond)) {                                                \
-            fprintf(stderr, "\n%s:%d - %s - FAIL\n",                       \
+            printf("\n%s:%d - %s - FAIL\n",                       \
                     __FILE__, __LINE__, msg);                              \
             ret = -1;                                                      \
         }                                                                  \
@@ -64,14 +64,14 @@ int verbose = 0;
 #define CHECK_CKR(rv, msg)                                                 \
     do {                                                                   \
         if (verbose) {                                                     \
-            fprintf(stderr, "%s:%d - %s", __FILE__, __LINE__, msg);        \
+            printf("%s:%d - %s", __FILE__, __LINE__, msg);        \
             if (rv != CKR_OK)                                              \
-                fprintf(stderr, ": %lx - FAIL\n", rv);                     \
+                printf(": %lx - FAIL\n", rv);                     \
             else                                                           \
-                fprintf(stderr, " - PASS\n");                              \
+                printf(" - PASS\n");                              \
         }                                                                  \
         else if (rv != CKR_OK) {                                           \
-            fprintf(stderr, "\n%s:%d - %s: %lx - FAIL\n",                  \
+            printf("\n%s:%d - %s: %lx - FAIL\n",                  \
                     __FILE__, __LINE__, msg, rv);                          \
         }                                                                  \
     }                                                                      \
@@ -79,19 +79,19 @@ int verbose = 0;
 #define CHECK_CKR_FAIL(rv, exp, msg)                                       \
     do {                                                                   \
         if (verbose) {                                                     \
-            fprintf(stderr, "%s:%d - %s", __FILE__, __LINE__, msg);        \
+            printf("%s:%d - %s", __FILE__, __LINE__, msg);        \
             if (rv != exp) {                                               \
-                fprintf(stderr, " RETURNED %lx - FAIL\n", rv);             \
+                printf(" RETURNED %lx - FAIL\n", rv);             \
                 if (rv == CKR_OK)                                          \
                     rv = -1;                                               \
             }                                                              \
             else {                                                         \
-                fprintf(stderr, " - PASS\n");                              \
+                printf(" - PASS\n");                              \
                 rv = CKR_OK;                                               \
             }                                                              \
         }                                                                  \
         else if (rv != exp) {                                              \
-            fprintf(stderr, "\n%s:%d - %s RETURNED %lx - FAIL\n",          \
+            printf("\n%s:%d - %s RETURNED %lx - FAIL\n",          \
                     __FILE__, __LINE__, msg, rv);                          \
             if (rv == CKR_OK)                                              \
                 rv = -1;                                                   \
@@ -104,7 +104,7 @@ int verbose = 0;
 #define CHECK_COND(cond, ret, msg)                                         \
     do {                                                                   \
         if (!(cond)) {                                                     \
-            fprintf(stderr, "\n%s:%d - %s - FAIL\n",                       \
+            printf("\n%s:%d - %s - FAIL\n",                       \
                     __FILE__, __LINE__, msg);                              \
             ret = -1;                                                      \
         }                                                                  \
@@ -113,7 +113,7 @@ int verbose = 0;
 #define CHECK_CKR(rv, msg)                                                 \
     do {                                                                   \
         if (rv != CKR_OK) {                                                \
-            fprintf(stderr, "\n%s:%d - %s: %lx - FAIL\n",                  \
+            printf("\n%s:%d - %s: %lx - FAIL\n",                  \
                     __FILE__, __LINE__, msg, rv);                          \
         }                                                                  \
     }                                                                      \
@@ -121,7 +121,7 @@ int verbose = 0;
 #define CHECK_CKR_FAIL(rv, exp, msg)                                       \
     do {                                                                   \
         if (rv != exp) {                                                   \
-            fprintf(stderr, "\n%s:%d - %s RETURNED %lx - FAIL\n",          \
+            printf("\n%s:%d - %s RETURNED %lx - FAIL\n",          \
                     __FILE__, __LINE__, msg, rv);                          \
             if (rv == CKR_OK)                                              \
                 rv = -1;                                                   \
@@ -226,7 +226,7 @@ static CK_RV pkcs11_set_user_pin(int slotId)
     }
 
     if (ret != CKR_OK)
-        fprintf(stderr, "FAILED: Setting user PIN\n");
+        printf("FAILED: Setting user PIN\n");
     return ret;
 }
 
@@ -1004,14 +1004,14 @@ static CK_RV pkcs11_init(const char* library)
 
     dlib = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (dlib == NULL) {
-        fprintf(stderr, "dlopen error: %s\n", dlerror());
+        printf("dlopen error: %s\n", dlerror());
         ret = -1;
     }
 
     if (ret == CKR_OK) {
         func = (void*)(CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
         if (func == NULL) {
-            fprintf(stderr, "Failed to get function list function\n");
+            printf("Failed to get function list function\n");
             ret = -1;
         }
     }
@@ -1088,7 +1088,7 @@ int pkcs11test_str(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Library name not supplied\n");
+                printf("Library name not supplied\n");
                 return 1;
             }
             libName = *argv;
@@ -1097,7 +1097,7 @@ int pkcs11test_str(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Token name not supplied\n");
+                printf("Token name not supplied\n");
                 return 1;
             }
             tokenName = *argv;
@@ -1106,7 +1106,7 @@ int pkcs11test_str(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "SO PIN not supplied\n");
+                printf("SO PIN not supplied\n");
                 return 1;
             }
             soPin = (byte*)*argv;
@@ -1116,7 +1116,7 @@ int pkcs11test_str(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "User PIN not supplied\n");
+                printf("User PIN not supplied\n");
                 return 1;
             }
             userPin = (byte*)*argv;

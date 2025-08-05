@@ -42,16 +42,16 @@ static inline void call_wolfPKCS11_Debugging_On(void) {
 #define CHECK_COND(cond, ret, msg)                                         \
     do {                                                                   \
         if (verbose) {                                                     \
-            fprintf(stderr, "%s:%d - %s - ", __FILE__, __LINE__, msg);     \
+            printf("%s:%d - %s - ", __FILE__, __LINE__, msg);     \
             if (!(cond)) {                                                 \
-                fprintf(stderr, "FAIL\n");                                 \
+                printf("FAIL\n");                                 \
                 ret = -1;                                                  \
             }                                                              \
             else                                                           \
-                fprintf(stderr, "PASS\n");                                 \
+                printf("PASS\n");                                 \
         }                                                                  \
         else if (!(cond)) {                                                \
-            fprintf(stderr, "\n%s:%d - %s - FAIL\n",                       \
+            printf("\n%s:%d - %s - FAIL\n",                       \
                     __FILE__, __LINE__, msg);                              \
             ret = -1;                                                      \
         }                                                                  \
@@ -60,14 +60,14 @@ static inline void call_wolfPKCS11_Debugging_On(void) {
 #define CHECK_CKR(rv, msg)                                                 \
     do {                                                                   \
         if (verbose) {                                                     \
-            fprintf(stderr, "%s:%d - %s", __FILE__, __LINE__, msg);        \
+            printf("%s:%d - %s", __FILE__, __LINE__, msg);        \
             if (rv != CKR_OK)                                              \
-                fprintf(stderr, ": %lx - FAIL\n", rv);                     \
+                printf(": %lx - FAIL\n", rv);                     \
             else                                                           \
-                fprintf(stderr, " - PASS\n");                              \
+                printf(" - PASS\n");                              \
         }                                                                  \
         else if (rv != CKR_OK) {                                           \
-            fprintf(stderr, "\n%s:%d - %s: %lx - FAIL\n",                  \
+            printf("\n%s:%d - %s: %lx - FAIL\n",                  \
                     __FILE__, __LINE__, msg, rv);                          \
         }                                                                  \
     }                                                                      \
@@ -75,19 +75,19 @@ static inline void call_wolfPKCS11_Debugging_On(void) {
 #define CHECK_CKR_FAIL(rv, exp, msg)                                       \
     do {                                                                   \
         if (verbose) {                                                     \
-            fprintf(stderr, "%s:%d - %s", __FILE__, __LINE__, msg);        \
+            printf("%s:%d - %s", __FILE__, __LINE__, msg);        \
             if (rv != exp) {                                               \
-                fprintf(stderr, " RETURNED %lx - FAIL\n", rv);             \
+                printf(" RETURNED %lx - FAIL\n", rv);             \
                 if (rv == CKR_OK)                                          \
                     rv = -1;                                               \
             }                                                              \
             else {                                                         \
-                fprintf(stderr, " - PASS\n");                              \
+                printf(" - PASS\n");                              \
                 rv = CKR_OK;                                               \
             }                                                              \
         }                                                                  \
         else if (rv != exp) {                                              \
-            fprintf(stderr, "\n%s:%d - %s RETURNED %lx - FAIL\n",          \
+            printf("\n%s:%d - %s RETURNED %lx - FAIL\n",          \
                     __FILE__, __LINE__, msg, rv);                          \
             if (rv == CKR_OK)                                              \
                 rv = -1;                                                   \
@@ -100,7 +100,7 @@ static inline void call_wolfPKCS11_Debugging_On(void) {
 #define CHECK_COND(cond, ret, msg)                                         \
     do {                                                                   \
         if (!(cond)) {                                                     \
-            fprintf(stderr, "\n%s:%d - %s - FAIL\n",                       \
+            printf("\n%s:%d - %s - FAIL\n",                       \
                     __FILE__, __LINE__, msg);                              \
             ret = -1;                                                      \
         }                                                                  \
@@ -109,7 +109,7 @@ static inline void call_wolfPKCS11_Debugging_On(void) {
 #define CHECK_CKR(rv, msg)                                                 \
     do {                                                                   \
         if (rv != CKR_OK) {                                                \
-            fprintf(stderr, "\n%s:%d - %s: %lx - FAIL\n",                  \
+            printf("\n%s:%d - %s: %lx - FAIL\n",                  \
                     __FILE__, __LINE__, msg, rv);                          \
         }                                                                  \
     }                                                                      \
@@ -117,7 +117,7 @@ static inline void call_wolfPKCS11_Debugging_On(void) {
 #define CHECK_CKR_FAIL(rv, exp, msg)                                       \
     do {                                                                   \
         if (rv != exp) {                                                   \
-            fprintf(stderr, "\n%s:%d - %s RETURNED %lx - FAIL\n",          \
+            printf("\n%s:%d - %s RETURNED %lx - FAIL\n",          \
                     __FILE__, __LINE__, msg, rv);                          \
             if (rv == CKR_OK)                                              \
                 rv = -1;                                                   \
@@ -244,12 +244,12 @@ static void* run_test(void* args)
     if (testArgs != NULL) {
         ret = LockRO();
         if (ret != 0)
-            fprintf(stderr, "Locking failed\n");
+            printf("Locking failed\n");
         else {
             tf->cnt = 0;
             rv = tf->setup(tf->flags, testArgs);
             if (rv != CKR_OK)
-                fprintf(stderr, "Setup failed\n");
+                printf("Setup failed\n");
             if (rv == CKR_OK) {
                 while (rv == CKR_OK && !stop) {
                     rv = tf->ret = tf->func(testArgs);
@@ -274,11 +274,11 @@ static CK_RV run_tests(TEST_FUNC* testFunc, int testFuncCnt, int onlySet,
 
     ret = LockInit();
     if (ret != 0)
-        fprintf(stderr, "Failed to initialize mutex!\n");
+        printf("Failed to initialize mutex!\n");
     else {
         ret = LockRW();
         if (ret != 0)
-            fprintf(stderr, "Failed to lock mutex!\n");
+            printf("Failed to lock mutex!\n");
         else {
             for (i = 0; i < testFuncCnt; i++) {
                 testFunc[i].attempted = 0;
@@ -292,12 +292,12 @@ static CK_RV run_tests(TEST_FUNC* testFunc, int testFuncCnt, int onlySet,
                 if (ret == CKR_OK) {
                     testFunc[i].attempted = 1;
 
-                    fprintf(stderr, "%d: %s ...\n", i + 1, testFunc[i].name);
+                    printf("%d: %s ...\n", i + 1, testFunc[i].name);
 
                     ret = pthread_create(&testFunc[i].thread, NULL, run_test,
                                                                   &testFunc[i]);
                     if (ret != 0)
-                        fprintf(stderr, "Failed to create thread for: %d\n", i);
+                        printf("Failed to create thread for: %d\n", i);
                 }
             }
 
@@ -307,24 +307,24 @@ static CK_RV run_tests(TEST_FUNC* testFunc, int testFuncCnt, int onlySet,
 
     for (i = 0; i < secs; i++) {
         sleep(1);
-        fprintf(stderr, ".");
+        printf(".");
     }
-    fprintf(stderr, "\n");
+    printf("\n");
     stop = 1;
     for (i = 0; i < testFuncCnt; i++) {
         if (!testFunc[i].attempted)
             continue;
 
         pthread_join(testFunc[i].thread, 0);
-        fprintf(stderr, "%d: %s ... %d ... ", i + 1, testFunc[i].name,
+        printf("%d: %s ... %d ... ", i + 1, testFunc[i].name,
                                                                testFunc[i].cnt);
         if (testFunc[i].ret == CKR_OK)
-            fprintf(stderr, "PASSED\n");
+            printf("PASSED\n");
         else if (testFunc[i].ret == CKR_SKIPPED) {
-            fprintf(stderr, "SKIPPED\n");
+            printf("SKIPPED\n");
         }
         else
-            fprintf(stderr, "FAILED\n");
+            printf("FAILED\n");
         }
 
     LockFree();
@@ -355,7 +355,7 @@ static CK_RV run_tests(TEST_FUNC* testFunc, int testFuncCnt, int onlySet,
 
         testArgs = XMALLOC(testFunc[i].argsSz, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         if (testArgs == NULL) {
-            fprintf(stderr, "Failed to allocate memory for test case args!\n");
+            printf("Failed to allocate memory for test case args!\n");
             ret = -1;
             break;
         }
@@ -364,19 +364,19 @@ static CK_RV run_tests(TEST_FUNC* testFunc, int testFuncCnt, int onlySet,
         if (ret == CKR_OK) {
             testFunc[i].attempted = 1;
 
-            fprintf(stderr, "%d: %s ... ", i + 1, testFunc[i].name);
+            printf("%d: %s ... ", i + 1, testFunc[i].name);
             if (verbose)
-                fprintf(stderr, " START\n");
+                printf(" START\n");
             testFunc[i].ret = testFunc[i].func(testArgs);
             if (verbose)
-                fprintf(stderr, "%d: %s ... ", i + 1, testFunc[i].name);
+                printf("%d: %s ... ", i + 1, testFunc[i].name);
             if (testFunc[i].ret == CKR_OK)
-                fprintf(stderr, "PASSED\n");
+                printf("PASSED\n");
             else if (testFunc[i].ret == CKR_SKIPPED) {
-                fprintf(stderr, "SKIPPED\n");
+                printf("SKIPPED\n");
             }
             else if (verbose)
-                fprintf(stderr, "FAILED\n");
+                printf("FAILED\n");
 
             testFunc[i].teardown(flags, testArgs);
         }
@@ -417,7 +417,7 @@ static int string_matches(const char* arg, const char* str)
         argc--;                                                            \
         argv++;                                                            \
         if (argc == 0) {                                                   \
-            fprintf(stderr, "Number of secs not supplied\n");              \
+            printf("Number of secs not supplied\n");              \
             return 1;                                                      \
         }                                                                  \
         secs = atoi(*argv);                                                \

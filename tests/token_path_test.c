@@ -87,7 +87,7 @@ static int test_failed = 0;
 
 #define CHECK_CKR(rv, op, expected) do {                    \
     if (rv != expected) {                                   \
-        fprintf(stderr, "FAIL: %s: expected %ld, got %ld\n", op, (long)expected, (long)rv); \
+        printf("FAIL: %s: expected %ld, got %ld\n", op, (long)expected, (long)rv); \
         test_failed++;                                      \
         return -1;                                          \
     } else {                                                \
@@ -117,14 +117,14 @@ static CK_RV pkcs11_init(const char* library)
 
     dlib = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (dlib == NULL) {
-        fprintf(stderr, "dlopen error: %s\n", dlerror());
+        printf("dlopen error: %s\n", dlerror());
         ret = -1;
     }
 
     if (ret == CKR_OK) {
         func = (void*)(CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
         if (func == NULL) {
-            fprintf(stderr, "Failed to get function list function\n");
+            printf("Failed to get function list function\n");
             ret = -1;
         }
     }
@@ -408,7 +408,7 @@ int main(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Library name not supplied\n");
+                printf("Library name not supplied\n");
                 return 1;
             }
             libName = *argv;
@@ -417,13 +417,13 @@ int main(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Slot number not supplied\n");
+                printf("Slot number not supplied\n");
                 return 1;
             }
             slot = atoi(*argv);
         }
         else {
-            fprintf(stderr, "Unknown argument: %s\n", *argv);
+            printf("Unknown argument: %s\n", *argv);
             Usage();
             return 1;
         }
@@ -438,7 +438,7 @@ int main(int argc, char* argv[])
     /* Initialize PKCS#11 */
     ret = pkcs11_init(libName);
     if (ret != CKR_OK) {
-        fprintf(stderr, "Failed to initialize PKCS#11: %ld\n", ret);
+        printf("Failed to initialize PKCS#11: %ld\n", ret);
         return 1;
     }
 

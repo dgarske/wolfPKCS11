@@ -6485,7 +6485,7 @@ static CK_RV pkcs11_set_user_pin(int slotId)
     funcList->C_CloseSession(session);
 
     if (ret != CKR_OK)
-        fprintf(stderr, "FAILED: Setting user PIN\n");
+        printf("FAILED: Setting user PIN\n");
 
     return ret;
 }
@@ -6695,8 +6695,8 @@ static CK_RV pkcs11_test(int slotId, int setPin, int onlySet, int closeDl)
             if (testFunc[i].ret != CKR_OK) {
 #ifdef DEBUG_WOLFPKCS11
                 if (ret == CKR_OK)
-                    fprintf(stderr, "\nFAILED tests:\n");
-                fprintf(stderr, "%d: %s\n", i + 1, testFunc[i].name);
+                    printf("\nFAILED tests:\n");
+                printf("%d: %s\n", i + 1, testFunc[i].name);
 #endif
                 ret = testFunc[i].ret;
             }
@@ -6704,11 +6704,11 @@ static CK_RV pkcs11_test(int slotId, int setPin, int onlySet, int closeDl)
                 passed++;
         }
     }
-    fprintf(stderr, "Result: %d / %d\n", passed, attempted);
+    printf("Result: %d / %d\n", passed, attempted);
     if (ret == CKR_OK)
-        fprintf(stderr, "Success\n");
+        printf("Success\n");
     else
-        fprintf(stderr, "Failures\n");
+        printf("Failures\n");
 
     if (inited)
         pkcs11_final(closeDl);
@@ -6725,14 +6725,14 @@ static CK_RV pkcs11_init(const char* library)
 
     dlib = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (dlib == NULL) {
-        fprintf(stderr, "dlopen error: %s\n", dlerror());
+        printf("dlopen error: %s\n", dlerror());
         ret = -1;
     }
 
     if (ret == CKR_OK) {
         func = (void*)(CK_C_GetFunctionList)dlsym(dlib, "C_GetFunctionList");
         if (func == NULL) {
-            fprintf(stderr, "Failed to get function list function\n");
+            printf("Failed to get function list function\n");
             ret = -1;
         }
     }
@@ -6801,7 +6801,7 @@ int pkcs11test_mtt(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Library name not supplied\n");
+                printf("Library name not supplied\n");
                 return 1;
             }
             libName = *argv;
@@ -6810,12 +6810,12 @@ int pkcs11test_mtt(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Test case number not supplied\n");
+                printf("Test case number not supplied\n");
                 return 1;
             }
             testCase = atoi(*argv);
             if (testCase <= 0 || testCase > testFuncCnt) {
-                fprintf(stderr, "Test case out of range: %s\n", *argv);
+                printf("Test case out of range: %s\n", *argv);
                 return 1;
             }
             testFunc[testCase - 1].run = 1;
@@ -6825,7 +6825,7 @@ int pkcs11test_mtt(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "Token name not supplied\n");
+                printf("Token name not supplied\n");
                 return 1;
             }
             tokenName = *argv;
@@ -6834,7 +6834,7 @@ int pkcs11test_mtt(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "SO PIN not supplied\n");
+                printf("SO PIN not supplied\n");
                 return 1;
             }
             soPin = (byte*)*argv;
@@ -6844,7 +6844,7 @@ int pkcs11test_mtt(int argc, char* argv[])
             argc--;
             argv++;
             if (argc == 0) {
-                fprintf(stderr, "User PIN not supplied\n");
+                printf("User PIN not supplied\n");
                 return 1;
             }
             userPin = (byte*)*argv;
@@ -6854,13 +6854,13 @@ int pkcs11test_mtt(int argc, char* argv[])
         }
         else if (string_matches(*argv, "-list")) {
             for (i = 0; i < testFuncCnt; i++)
-                fprintf(stderr, "%d: %s\n", i + 1, testFunc[i].name);
+                printf("%d: %s\n", i + 1, testFunc[i].name);
             return 0;
         }
         else if (isdigit(argv[0][0])) {
             testCase = atoi(*argv);
             if (testCase <= 0 || testCase > testFuncCnt) {
-                fprintf(stderr, "Test case out of range: %s\n", *argv);
+                printf("Test case out of range: %s\n", *argv);
                 return 1;
             }
             testFunc[testCase - 1].run = 1;
@@ -6875,7 +6875,7 @@ int pkcs11test_mtt(int argc, char* argv[])
                 }
             }
             if (i == testFuncCnt) {
-                fprintf(stderr, "Test case name doesn't match: %s\n", *argv);
+                printf("Test case name doesn't match: %s\n", *argv);
                 return 1;
             }
         }
@@ -6908,7 +6908,7 @@ int pkcs11test_mtt(int argc, char* argv[])
 {
     (void)argc;
     (void)argv;
-    fprintf(stderr, "%s: multi-threaded example not compiled in!\n", argv[0]);
+    printf("%s: multi-threaded example not compiled in!\n", argv[0]);
     return 0;
 }
 
