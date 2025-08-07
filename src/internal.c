@@ -10455,6 +10455,13 @@ static word32 Pkcs11ECDSASig_Encode(byte* sig, word32 sigSz, byte* encSig)
     if (sHigh)
         encSig[i] = 0x00;
 
+    printf("Pkcs11ECDSASig_Encode: seqLen %d, sigSz %d, rHigh %d, sHigh %d, i %d, rStart %d, sStart %d\n",
+        seqLen, sigSz, rHigh, sHigh, i, rStart, sStart);
+#ifdef WOLFPKCS11_TPM
+    TPM2_PrintBin(sig, sigSz);
+    TPM2_PrintBin(encSig, seqLen + sigSz);
+#endif
+
     return seqLen + sigSz;
 }
 
@@ -10464,19 +10471,24 @@ static word32 Pkcs11ECDSASig_Encode(byte* sig, word32 sigSz, byte* encSig)
  * @param  in     [in]  Encode signature data.
  * @param  inSz   [in]  Length of encoded signature in bytes.
  * @param  sig    [in]  Buffer to hold raw signature data.
- * @param  sigSz  [in]  Length of ordinate in bytes.
+ * @param  ordSz  [in]  Length of ordinate in bytes.
  * @return  ASN_PARSE_E when the ASN.1 encoding is invalid.
  *          0 on success.
  */
 static int Pkcs11ECDSASig_Decode(const byte* in, word32 inSz, byte* sig,
-                                 word32 sz)
+                                 word32 ordSz)
 {
     int ret = 0;
     word32 i = 0;
-    int len, seqLen = 2;
+    int len = 0, seqLen = 2;
 
     /* Make sure zeros in place when decoding short integers. */
-    XMEMSET(sig, 0, sz * 2);
+    XMEMSET(sig, 0, ordSz * 2);
+
+    printf("Pkcs11ECDSASig_Decode: inSz %d, ordSz %d\n", inSz, ordSz);
+#ifdef WOLFPKCS11_TPM
+    TPM2_PrintBin(in, inSz);
+#endif
 
     /* Check min data for: SEQ + INT. */
     if (inSz < 5)
@@ -10498,7 +10510,7 @@ static int Pkcs11ECDSASig_Decode(const byte* in, word32 inSz, byte* sig,
     /* Check INT */
     if (ret == 0 && in[i++] != ASN_INTEGER)
         ret = ASN_PARSE_E;
-    if (ret == 0 && (len = in[i++]) > (int)sz + 1)
+    if (ret == 0 && (len = in[i++]) > (int)ordSz + 1)
         ret = ASN_PARSE_E;
     /* Check there is space for INT data */
     if (ret == 0 && i + len > inSz)
@@ -10508,9 +10520,11 @@ static int Pkcs11ECDSASig_Decode(const byte* in, word32 inSz, byte* sig,
         if (in[i] == 0x00) {
             i++;
             len--;
+            printf("Decode skip r leading zero\n");
         }
+        printf("Decode r len %d, i %d\n", len, i);
         /* Copy r into sig. */
-        XMEMCPY(sig + sz - len, in + i, len);
+        XMEMCPY(sig + ordSz - len, in + i, len);
         i += len;
     }
 
@@ -10520,7 +10534,7 @@ static int Pkcs11ECDSASig_Decode(const byte* in, word32 inSz, byte* sig,
     /* Check INT */
     if (ret == 0 && in[i++] != ASN_INTEGER)
         ret = ASN_PARSE_E;
-    if (ret == 0 && (len = in[i++]) > (int)sz + 1)
+    if (ret == 0 && (len = in[i++]) > (int)ordSz + 1)
         ret = ASN_PARSE_E;
     /* Check there is space for INT data */
     if (ret == 0 && i + len > inSz)
@@ -10530,10 +10544,18 @@ static int Pkcs11ECDSASig_Decode(const byte* in, word32 inSz, byte* sig,
         if (in[i] == 0x00) {
             i++;
             len--;
+            printf("Decode skip s leading zero\n");
         }
+        printf("Decode s len %d, i %d\n", len, i);
         /* Copy s into sig. */
-        XMEMCPY(sig + sz + sz - len, in + i, len);
+        XMEMCPY(sig + ordSz + ordSz - len, in + i, len);
     }
+
+    printf("Pkcs11ECDSASig_Decode: ret %d, i %d, len %d, inSz %d, sz %d\n",
+        ret, i, len, inSz, ordSz);
+#ifdef WOLFPKCS11_TPM
+    TPM2_PrintBin(sig, ordSz * 2);
+#endif
 
     return ret;
 }
@@ -10576,10 +10598,14 @@ int WP11_Ec_Sign(unsigned char* hash, word32 hashLen, unsigned char* sig,
     if (priv->onToken)
         WP11_Lock_LockRO(priv->lock);
     ordSz = priv->data.ecKey->dp->size;
+
+    printf("WP11_Ec_Sign: ECC_MAX_SIG_SIZE %d, sizeof(WC_RNG) %d, ordSz %d\n",
+        ECC_MAX_SIG_SIZE, (int)sizeof(WC_RNG), ordSz);
+
     if (priv->onToken)
         WP11_Lock_UnlockRO(priv->lock);
 
-    if (*sigLen < ordSz * 2)
+    if (*sigLen < ordSz * 2 || ordSz * 2 > ECC_MAX_SIG_SIZE)
         ret = BUFFER_E;
     if (ret == 0) {
         encSigLen = sizeof(encSig);
