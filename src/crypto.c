@@ -1583,6 +1583,18 @@ CK_RV C_CopyObject(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
         return rv;
     }
 
+    /* Creating a private object requires an authenticated user session. The
+     * copy template can set CKA_PRIVATE=CK_TRUE, so gate it like
+     * C_CreateObject. The copy's default CKA_PRIVATE is inherited from the
+     * source object, whose own login requirement was already enforced by
+     * WP11_Object_Find above, so only an explicit template override is checked
+     * here (WP11_NO_IMPLICIT_CLASS = template inspection only). */
+    rv = CheckPrivateLogin(session, pTemplate, ulCount, WP11_NO_IMPLICIT_CLASS);
+    if (rv != CKR_OK) {
+        WOLFPKCS11_LEAVE("C_CopyObject", rv);
+        return rv;
+    }
+
     keyType = WP11_Object_GetType(obj);
 
     /* The copy inherits the source's CKA_TOKEN (PKCS#11 v2.40 4.6.2) unless
