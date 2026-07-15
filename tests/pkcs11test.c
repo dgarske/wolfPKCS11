@@ -6538,12 +6538,16 @@ static CK_RV test_wrap_key_wrap_with_trusted(void* args)
     };
     CK_ULONG untrustedWrapTmplCnt = sizeof(untrustedWrapTmpl) /
                                     sizeof(*untrustedWrapTmpl);
+    /* CKA_TRUSTED may only be set by the SO, so the trusted wrapping key is
+     * provisioned as a public token object under an SO session. */
     CK_ATTRIBUTE trustedWrapTmpl[] = {
         { CKA_CLASS,       &secretKeyClass,   sizeof(secretKeyClass)    },
         { CKA_KEY_TYPE,    &aesKeyType,       sizeof(aesKeyType)        },
         { CKA_VALUE,       aes_128_key,       sizeof(aes_128_key)       },
         { CKA_WRAP,        &ckTrue,           sizeof(ckTrue)            },
         { CKA_TRUSTED,     &ckTrusted,        sizeof(CK_BBOOL)          },
+        { CKA_TOKEN,       &ckTrue,           sizeof(ckTrue)            },
+        { CKA_PRIVATE,     &ckFalse,          sizeof(ckFalse)           },
     };
     CK_ULONG trustedWrapTmplCnt = sizeof(trustedWrapTmpl) /
                                   sizeof(*trustedWrapTmpl);
@@ -6558,13 +6562,44 @@ static CK_RV test_wrap_key_wrap_with_trusted(void* args)
 
     memset(keyData, 0x55, sizeof(keyData));
 
-    ret = funcList->C_CreateObject(session, untrustedWrapTmpl,
-                                   untrustedWrapTmplCnt, &untrustedKey);
-    CHECK_CKR(ret, "Create untrusted AES wrapping key");
+    /* Provision the trusted wrapping key as the SO. The token has a single
+     * login state, so log the harness user out, log in as SO to create the
+     * public token key, then restore the user session. */
+    ret = funcList->C_Logout(session);
+    CHECK_CKR(ret, "Logout user before SO provisioning");
+    if (ret == CKR_OK) {
+        ret = funcList->C_Login(session, CKU_SO, soPin, soPinLen);
+        CHECK_CKR(ret, "Login SO to create trusted key");
+    }
     if (ret == CKR_OK) {
         ret = funcList->C_CreateObject(session, trustedWrapTmpl,
                                        trustedWrapTmplCnt, &trustedKey);
-        CHECK_CKR(ret, "Create trusted AES wrapping key");
+        CHECK_CKR(ret, "Create trusted AES wrapping key (SO)");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_Logout(session);
+        CHECK_CKR(ret, "Logout SO after provisioning");
+    }
+    if (ret == CKR_OK) {
+        ret = funcList->C_Login(session, CKU_USER, userPin, userPinLen);
+        CHECK_CKR(ret, "Re-login user after SO provisioning");
+    }
+
+    /* A user session must not be able to forge CKA_TRUSTED (F-5867). */
+    if (ret == CKR_OK) {
+        CK_OBJECT_HANDLE forgedKey = CK_INVALID_HANDLE;
+        ret = funcList->C_CreateObject(session, trustedWrapTmpl,
+                                       trustedWrapTmplCnt, &forgedKey);
+        if (ret == CKR_OK)
+            funcList->C_DestroyObject(session, forgedKey);
+        CHECK_CKR_FAIL(ret, CKR_ATTRIBUTE_READ_ONLY,
+                       "User session forging CKA_TRUSTED must be rejected");
+    }
+
+    if (ret == CKR_OK) {
+        ret = funcList->C_CreateObject(session, untrustedWrapTmpl,
+                                       untrustedWrapTmplCnt, &untrustedKey);
+        CHECK_CKR(ret, "Create untrusted AES wrapping key");
     }
     if (ret == CKR_OK) {
         ret = funcList->C_CreateObject(session, wwtTmpl, wwtTmplCnt, &key);

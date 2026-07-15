@@ -1028,6 +1028,17 @@ static CK_RV SetAttributeValue(WP11_Session* session, WP11_Object* obj,
                     *(CK_BBOOL*)attr->pValue == CK_TRUE)
                 return CKR_ATTRIBUTE_READ_ONLY;
         }
+        /* PKCS#11 v2.40 sec 4.5: only an SO session may set CKA_TRUSTED to
+         * CK_TRUE. A regular-user session must not forge trust and bypass the
+         * CKA_WRAP_WITH_TRUSTED export gate enforced by C_WrapKey. Not
+         * qualified with !newObject so it also stops C_CreateObject /
+         * C_GenerateKey from minting a trusted key. CheckAttributes above has
+         * already validated CKA_TRUSTED as a well-formed CK_BBOOL. */
+        if (attr->type == CKA_TRUSTED &&
+                *(CK_BBOOL*)attr->pValue == CK_TRUE &&
+                WP11_Session_GetState(session) != WP11_APP_STATE_RW_SO) {
+            return CKR_ATTRIBUTE_READ_ONLY;
+        }
         /* These class/identity and generated-state attributes are read-only
          * once the object exists; reject a change. Setting the current value
          * is a no-op. */
