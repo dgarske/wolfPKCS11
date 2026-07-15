@@ -7050,6 +7050,12 @@ void WP11_Slot_CloseSessions(WP11_Slot* slot)
     for (curr = slot->session; curr != NULL; curr = curr->next)
         wp11_Session_Final(curr);
     WP11_Lock_UnlockRW(&slot->lock);
+
+    /* PKCS#11: closing an application's last session with a token logs the
+     * application out. Mirror the single-session close path and reset the
+     * token login state (outside the slot lock, as WP11_Slot_Logout takes it).
+     */
+    WP11_Slot_Logout(slot);
 }
 
 /**
