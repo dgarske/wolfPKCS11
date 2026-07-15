@@ -7183,6 +7183,21 @@ static int HashPIN(char* pin, int pinLen, byte* seed, int seedLen, byte* hash,
                                     WP11_HASH_PIN_COST, WP11_HASH_PIN_BLOCKSIZE,
                                     WP11_HASH_PIN_PARALLEL, hashLen);
 #elif !defined(NO_SHA256)
+    /* Fallback: unsalted single-pass SHA-256 of the PIN. This provides no
+     * salt (the per-token seed is discarded) and no key stretching, so an
+     * attacker with the token-store file can brute-force a weak PIN offline
+     * and recover the token storage key. Configure WOLFPKCS11_PBKDF2 or
+     * HAVE_SCRYPT for a salted, stretched KDF. The selection is compile-time
+     * and otherwise silent, so warn integrators unless they opt out (F-6232).
+     * Note: changing this derivation would invalidate existing token stores,
+     * so hardening it in place is left as a deliberate maintainer decision. */
+#ifndef WOLFPKCS11_ALLOW_WEAK_PIN_KDF
+    #if defined(_MSC_VER)
+        #pragma message("wolfPKCS11: no PBKDF2/scrypt - PIN hashing and token key derivation use unsalted SHA-256; define WOLFPKCS11_PBKDF2 or HAVE_SCRYPT for a strong KDF, or WOLFPKCS11_ALLOW_WEAK_PIN_KDF to silence")
+    #elif defined(__GNUC__) || defined(__clang__)
+        #warning "wolfPKCS11: no PBKDF2/scrypt - PIN hashing and token key derivation use unsalted SHA-256; define WOLFPKCS11_PBKDF2 or HAVE_SCRYPT for a strong KDF, or WOLFPKCS11_ALLOW_WEAK_PIN_KDF to silence"
+    #endif
+#endif
     /* fallback to simple SHA2-256 hash of pin */
     (void)seed;
     (void)seedLen;
