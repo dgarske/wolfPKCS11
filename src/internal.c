@@ -8523,6 +8523,13 @@ int WP11_Session_SetCbcParams(WP11_Session* session, unsigned char* iv,
     WP11_CbcParams* cbc = &session->params.cbc;
     WP11_Data* key;
 
+    /* The session params union is shared by every mechanism and is only zeroed
+     * at allocation, so a prior operation can leave stale multi-part streaming
+     * state here. Reset it before use (as the other Set*Params routines do) so
+     * a fresh CBC operation cannot inherit a bogus partial-block count. */
+    cbc->partialSz = 0;
+    XMEMSET(cbc->partial, 0, sizeof(cbc->partial));
+
     /* AES object on session. */
     ret = wc_AesInit(&cbc->aes, NULL, object->devId);
 #ifdef WOLFSSL_STM32U5_DHUK
