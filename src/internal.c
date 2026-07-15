@@ -14503,6 +14503,13 @@ int WP11_AesCbc_EncryptUpdate(unsigned char* plain, word32 plainSz,
     int sz = 0;
     int outSz = 0;
 
+    /* Serialize the read-modify-write of cbc->partial/partialSz. Without this
+     * two threads sharing one session handle can both read partialSz, both
+     * copy into cbc->partial and both add, driving partialSz past
+     * AES_BLOCK_SIZE so the next call computes a negative sz and overflows the
+     * 16-byte partial buffer (F-5764). No caller holds slot->lock here. */
+    WP11_Lock_LockRW(&session->slot->lock);
+
     if (cbc->partialSz > 0) {
         sz = AES_BLOCK_SIZE - cbc->partialSz;
         if (sz > (int)plainSz)
@@ -14536,6 +14543,7 @@ int WP11_AesCbc_EncryptUpdate(unsigned char* plain, word32 plainSz,
     if (ret == 0)
         *encSz = outSz;
 
+    WP11_Lock_UnlockRW(&session->slot->lock);
     return ret;
 }
 
@@ -14610,6 +14618,10 @@ int WP11_AesCbc_DecryptUpdate(unsigned char* enc, word32 encSz,
     int sz = 0;
     int outSz = 0;
 
+    /* Serialize the partial-block read-modify-write against a concurrent
+     * update on the same session (F-5764); see WP11_AesCbc_EncryptUpdate. */
+    WP11_Lock_LockRW(&session->slot->lock);
+
     if (cbc->partialSz > 0) {
         sz = AES_BLOCK_SIZE - cbc->partialSz;
         if (sz > (int)encSz)
@@ -14642,6 +14654,7 @@ int WP11_AesCbc_DecryptUpdate(unsigned char* enc, word32 encSz,
     if (ret == 0)
         *decSz = outSz;
 
+    WP11_Lock_UnlockRW(&session->slot->lock);
     return ret;
 }
 
@@ -14814,6 +14827,10 @@ int WP11_AesCbcPad_DecryptUpdate(unsigned char* enc, word32 encSz,
     int sz = 0;
     int outSz = 0;
 
+    /* Serialize the partial-block read-modify-write against a concurrent
+     * update on the same session (F-5764); see WP11_AesCbc_EncryptUpdate. */
+    WP11_Lock_LockRW(&session->slot->lock);
+
     if (cbc->partialSz > 0) {
         sz = AES_BLOCK_SIZE - cbc->partialSz;
         if (sz > (int)encSz)
@@ -14827,6 +14844,7 @@ int WP11_AesCbcPad_DecryptUpdate(unsigned char* enc, word32 encSz,
              * far and leave the operation active (CKR_BUFFER_TOO_SMALL). */
             if ((word32)(outSz + AES_BLOCK_SIZE) > bufSz) {
                 *decSz = (word32)outSz + AES_BLOCK_SIZE;
+                WP11_Lock_UnlockRW(&session->slot->lock);
                 return BUFFER_E;
             }
             ret = wc_AesCbcDecrypt(&cbc->aes, dec, cbc->partial,
@@ -14842,6 +14860,7 @@ int WP11_AesCbcPad_DecryptUpdate(unsigned char* enc, word32 encSz,
             sz -= AES_BLOCK_SIZE;
         if ((word32)(outSz + sz) > bufSz) {
             *decSz = (word32)(outSz + sz);
+            WP11_Lock_UnlockRW(&session->slot->lock);
             return BUFFER_E;
         }
         ret = wc_AesCbcDecrypt(&cbc->aes, dec, enc, sz);
@@ -14856,6 +14875,7 @@ int WP11_AesCbcPad_DecryptUpdate(unsigned char* enc, word32 encSz,
     if (ret == 0)
         *decSz = outSz;
 
+    WP11_Lock_UnlockRW(&session->slot->lock);
     return ret;
 }
 
