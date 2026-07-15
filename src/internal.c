@@ -1379,6 +1379,9 @@ static int wolfPKCS11_Store_Name(int type, CK_ULONG id1, CK_ULONG id2, char* nam
      */
     enum { WP11_STORE_SUFFIX_RESERVE = 48 };
     char homePath[256];
+#ifdef WP11_HAVE_STORE_DIR_LOCK
+    char storeDirCopy[WP11_STORE_MAX_PATH];
+#endif
 
     /* Path order:
      * 1. Environment variable WOLFPKCS11_TOKEN_PATH
@@ -1392,8 +1395,27 @@ static int wolfPKCS11_Store_Name(int type, CK_ULONG id1, CK_ULONG id2, char* nam
 #endif
 
 #ifdef WOLFPKCS11_NSS
-    if (str == NULL)
+    if (str == NULL) {
+#ifdef WP11_HAVE_STORE_DIR_LOCK
+        /* Copy storeDir into a local under storeDirLock so a concurrent
+         * WP11_Library_Final free cannot leave str dangling while we format
+         * the path below (F-5150). The lock is released before use. */
+        if (wc_LockMutex(&storeDirLock) != 0)
+            return -1;
+        if (storeDir != NULL) {
+            size_t sdLen = XSTRLEN(storeDir);
+            if (sdLen >= sizeof(storeDirCopy)) {
+                wc_UnLockMutex(&storeDirLock);
+                return -1;
+            }
+            XMEMCPY(storeDirCopy, storeDir, sdLen + 1);
+            str = storeDirCopy;
+        }
+        wc_UnLockMutex(&storeDirLock);
+#else
         str = storeDir;
+#endif
+    }
 #endif
 
     if (str == NULL) {
