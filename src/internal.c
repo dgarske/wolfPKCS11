@@ -3339,8 +3339,11 @@ static int wp11_Object_Load_Data(WP11_Object* object, int tokenId, int objId)
 #ifdef WOLFSSL_MAXQ10XX_CRYPTO
 #ifdef MAXQ10XX_PRODUCTION_KEY
 #include "maxq10xx_key.h"
-#else
-/* TEST KEY. This must be changed for production environments!! */
+#elif defined(WOLFPKCS11_MAXQ10XX_TEST_KEY)
+/* INSECURE TEST KEY. The private scalar (last 32 bytes) is public in the
+ * source, so anyone can forge a valid MXQ_ImportRootCert provisioning
+ * signature for an arbitrary root certificate. For development against the
+ * MAXQ10xx evaluation kit only - never ship this. */
 static mxq_u1 KeyPairImport[] = {
     0xd0,0x97,0x31,0xc7,0x63,0xc0,0x9e,0xe3,0x9a,0xb4,0xd0,0xce,0xa7,0x89,0xab,
     0x52,0xc8,0x80,0x3a,0x91,0x77,0x29,0xc3,0xa0,0x79,0x2e,0xe6,0x61,0x8b,0x2d,
@@ -3350,6 +3353,8 @@ static mxq_u1 KeyPairImport[] = {
     0x72,0x5e,0x88,0xaf,0xc2,0xee,0x8b,0x6f,0xe5,0x36,0xe3,0x60,0x7c,0xf8,0x2c,
     0xea,0x3a,0x4f,0xe3,0x6d,0x73
 };
+#else
+#error "MAXQ10xx root-cert provisioning key is undefined. Define MAXQ10XX_PRODUCTION_KEY (with a real maxq10xx_key.h) for production, or WOLFPKCS11_MAXQ10XX_TEST_KEY to explicitly opt into the built-in INSECURE test key for evaluation-kit development."
 #endif /* MAXQ10XX_PRODUCTION_KEY */
 
 static int crypto_sha256(const byte *buf, word32 len, byte *hash,
