@@ -641,6 +641,20 @@ static wolfSSL_Mutex libraryInitLock
 #define WP11_HAVE_LIBRARY_INIT_LOCK
 #endif
 
+#if !defined(SINGLE_THREADED) && defined(WOLFSSL_MUTEX_INITIALIZER) && \
+    defined(WOLFSSL_MUTEX_INITIALIZER_CLAUSE) && \
+    !defined(WOLFPKCS11_TPM_STORE) && defined(WOLFPKCS11_NSS)
+/* Permanently-live leaf mutex serializing the module-global storeDir, which
+ * is set at C_Initialize (before globalLock exists), read in
+ * wolfPKCS11_Store_Name, and freed in WP11_Library_Final after globalLock is
+ * released. Without it the free races the set/read (Fenrir F-5868, F-5150).
+ * Static init mirrors libraryInitLock. It is always acquired as a leaf (no
+ * other lock is taken while it is held), so it cannot invert any ordering. */
+static wolfSSL_Mutex storeDirLock
+    WOLFSSL_MUTEX_INITIALIZER_CLAUSE(storeDirLock);
+#define WP11_HAVE_STORE_DIR_LOCK
+#endif
+
 
 #ifndef SINGLE_THREADED
 /**
@@ -1149,17 +1163,30 @@ static char* storeDir = NULL;
 
 int WP11_SetStoreDir(const char *dir, size_t dirSz)
 {
+    int ret = 0;
+#ifdef WP11_HAVE_STORE_DIR_LOCK
+    /* Serialize against the free in WP11_Library_Final and any concurrent set
+     * so the XFREE/XMALLOC/XMEMCPY sequence is not raced (F-5868). */
+    if (wc_LockMutex(&storeDirLock) != 0)
+        return BAD_MUTEX_E;
+#endif
     if (storeDir != NULL)
         XFREE(storeDir, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     storeDir = NULL;
     if (dir != NULL) {
         storeDir = (char*) XMALLOC(dirSz + 1, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        if (storeDir == NULL)
-            return MEMORY_E;
-        XMEMCPY(storeDir, dir, dirSz);
-        storeDir[dirSz] = '\0'; /* Ensure null termination */
+        if (storeDir == NULL) {
+            ret = MEMORY_E;
+        }
+        else {
+            XMEMCPY(storeDir, dir, dirSz);
+            storeDir[dirSz] = '\0'; /* Ensure null termination */
+        }
     }
-    return 0;
+#ifdef WP11_HAVE_STORE_DIR_LOCK
+    wc_UnLockMutex(&storeDirLock);
+#endif
+    return ret;
 }
 #endif
 
@@ -6784,8 +6811,18 @@ void WP11_Library_Final(void)
             (void)ret; /* store failure cannot be returned, so log and ignore */
         }
 #if !defined (WOLFPKCS11_CUSTOM_STORE) && defined(WOLFPKCS11_NSS)
+        /* Serialize the free against a concurrent WP11_SetStoreDir /
+         * wolfPKCS11_Store_Name (F-5868, F-5150). Nested inside libraryInitLock
+         * (held here); storeDirLock is a leaf so the fixed order
+         * libraryInitLock -> storeDirLock cannot deadlock. */
+#ifdef WP11_HAVE_STORE_DIR_LOCK
+        wc_LockMutex(&storeDirLock);
+#endif
         XFREE(storeDir, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         storeDir = NULL;
+#ifdef WP11_HAVE_STORE_DIR_LOCK
+        wc_UnLockMutex(&storeDirLock);
+#endif
 #endif
 #endif
         /* Cleanup the slots. */
