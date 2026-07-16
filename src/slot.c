@@ -1286,12 +1286,16 @@ CK_RV C_InitToken(CK_SLOT_ID slotID, CK_UTF8CHAR_PTR pPin,
         return rv;
     }
 
+    /* PKCS#11: an open session on the token must fail C_InitToken with
+     * CKR_SESSION_EXISTS regardless of whether the token is already
+     * initialized. Check this unconditionally before any token-reset logic. */
+    if (WP11_Slot_HasSession(slot)) {
+        rv = CKR_SESSION_EXISTS;
+        WOLFPKCS11_LEAVE("C_InitToken", rv);
+        return rv;
+    }
+
     if (WP11_Slot_IsTokenInitialized(slot)) {
-        if (WP11_Slot_HasSession(slot)) {
-            rv = CKR_SESSION_EXISTS;
-            WOLFPKCS11_LEAVE("C_InitToken", rv);
-            return rv;
-        }
         if (WP11_Slot_SOPin_IsSet(slot)) {
             /* Verify the SO PIN with the failed-login lockout applied, so this
              * path cannot be used to brute-force the SO PIN (Fenrir F-4632).
