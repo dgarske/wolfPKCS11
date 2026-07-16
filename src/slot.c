@@ -539,6 +539,9 @@ CK_RV C_GetMechanismList(CK_SLOT_ID slotID,
         return rv;
     }
     else if (*pulCount < (CK_ULONG)mechanismCnt) {
+        /* PKCS#11: on CKR_BUFFER_TOO_SMALL *pulCount must be set to the
+         * required count so the two-call (size-query then fetch) idiom works. */
+        *pulCount = mechanismCnt;
         rv = CKR_BUFFER_TOO_SMALL;
         WOLFPKCS11_LEAVE("C_GetMechanismList", rv);
         return rv;
