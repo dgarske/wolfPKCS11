@@ -144,6 +144,14 @@ versions may need to update templates or error-handling:
   (`--enable-nss`) keep the empty-PIN probe accepted on uninitialized
   tokens because `PK11_InitPin` bootstraps an empty-password NSS
   database that way; non-empty PINs are still rejected.
+- On `--enable-nss` builds `WP11_MIN_PIN_LEN` defaults to `0`, permitting a
+  zero-length user PIN. An empty user PIN intentionally disables PIN-based
+  authentication: `C_GetTokenInfo` clears `CKF_LOGIN_REQUIRED` and all
+  private/token objects are decoded and accessible at token load without
+  `C_Login`. This is required for NSS tools (`certutil`, `PK11_InitPin`) that
+  bootstrap empty-password databases. Integrators who require an enforced
+  minimum can opt in at build time with `C_EXTRA_FLAGS="-DWP11_MIN_PIN_LEN=N"`
+  (`N>0`); non-NSS builds already default to `4`.
 
 #### Analog Devices, Inc. MAXQ10xx Secure Elements ([MAXQ1065](https://www.analog.com/en/products/maxq1065.html)/MAXQ1080)
 
