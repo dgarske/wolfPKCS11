@@ -384,7 +384,7 @@ static CK_MECHANISM_TYPE mechanismList[] = {
 #endif
 #ifndef NO_AES
     CKM_AES_KEY_GEN,
-#ifdef HAVE_AES_KEY_WRAP
+#ifdef HAVE_AES_KEYWRAP
     CKM_AES_KEY_WRAP,
     CKM_AES_KEY_WRAP_PAD,
 #endif
@@ -719,7 +719,7 @@ static CK_MECHANISM_INFO tlsMacMechInfo = {
 static CK_MECHANISM_INFO aesKeyGenMechInfo = {
     16, 32, CKF_GENERATE
 };
-#ifdef HAVE_AES_KEY_WRAP
+#ifdef HAVE_AES_KEYWRAP
 static CK_MECHANISM_INFO aesKeyWrapMechInfo = {
     16, 32, CKF_ENCRYPT | CKF_DECRYPT | CKF_WRAP | CKF_UNWRAP
 };
@@ -1032,7 +1032,7 @@ CK_RV C_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type,
         case CKM_AES_KEY_GEN:
             XMEMCPY(pInfo, &aesKeyGenMechInfo, sizeof(CK_MECHANISM_INFO));
             break;
-#ifdef HAVE_AES_KEY_WRAP
+#ifdef HAVE_AES_KEYWRAP
         case CKM_AES_KEY_WRAP:
         case CKM_AES_KEY_WRAP_PAD:
             XMEMCPY(pInfo, &aesKeyWrapMechInfo, sizeof(CK_MECHANISM_INFO));
