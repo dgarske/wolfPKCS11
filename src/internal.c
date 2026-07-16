@@ -6842,14 +6842,18 @@ void WP11_Library_Final(void)
          * wolfPKCS11_Store_Name (F-5868, F-5150). Nested inside libraryInitLock
          * (held here); storeDirLock is a leaf so the fixed order
          * libraryInitLock -> storeDirLock cannot deadlock. */
+        {
 #ifdef WP11_HAVE_STORE_DIR_LOCK
-        wc_LockMutex(&storeDirLock);
+            int storeDirLocked = (wc_LockMutex(&storeDirLock) == 0);
 #endif
-        XFREE(storeDir, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        storeDir = NULL;
+            XFREE(storeDir, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            storeDir = NULL;
 #ifdef WP11_HAVE_STORE_DIR_LOCK
-        wc_UnLockMutex(&storeDirLock);
+            /* Only unlock if the lock was actually acquired. */
+            if (storeDirLocked)
+                wc_UnLockMutex(&storeDirLock);
 #endif
+        }
 #endif
 #endif
         /* Cleanup the slots. */
