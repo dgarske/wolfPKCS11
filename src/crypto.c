@@ -1132,6 +1132,17 @@ static CK_RV SetAttributeValue(WP11_Session* session, WP11_Object* obj,
                     *(CK_BBOOL*)attr->pValue == CK_TRUE)
                 return CKR_ATTRIBUTE_READ_ONLY;
         }
+        /* PKCS#11 v2.40 sec 4.5: only an SO session may set CKA_TRUSTED to
+         * CK_TRUE. A regular-user session must not forge trust and bypass the
+         * CKA_WRAP_WITH_TRUSTED export gate enforced by C_WrapKey. Not
+         * qualified with !newObject so it also stops C_CreateObject /
+         * C_GenerateKey from minting a trusted key. CheckAttributes above has
+         * already validated CKA_TRUSTED as a well-formed CK_BBOOL. */
+        if (attr->type == CKA_TRUSTED &&
+                *(CK_BBOOL*)attr->pValue == CK_TRUE &&
+                WP11_Session_GetState(session) != WP11_APP_STATE_RW_SO) {
+            return CKR_ATTRIBUTE_READ_ONLY;
+        }
         /* These class/identity and generated-state attributes are read-only
          * once the object exists; reject a change. Setting the current value
          * is a no-op. */
@@ -1716,6 +1727,18 @@ CK_RV C_CopyObject(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
      * changes the C_GetAttributeValue view). */
     if (!WP11_Object_IsCopyable(obj)) {
         rv = CKR_ACTION_PROHIBITED;
+        WOLFPKCS11_LEAVE("C_CopyObject", rv);
+        return rv;
+    }
+
+    /* Creating a private object requires an authenticated user session. The
+     * copy template can set CKA_PRIVATE=CK_TRUE, so gate it like
+     * C_CreateObject. The copy's default CKA_PRIVATE is inherited from the
+     * source object, whose own login requirement was already enforced by
+     * WP11_Object_Find above, so only an explicit template override is checked
+     * here (WP11_NO_IMPLICIT_CLASS = template inspection only). */
+    rv = CheckPrivateLogin(session, pTemplate, ulCount, WP11_NO_IMPLICIT_CLASS);
+    if (rv != CKR_OK) {
         WOLFPKCS11_LEAVE("C_CopyObject", rv);
         return rv;
     }

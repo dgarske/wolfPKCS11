@@ -391,7 +391,7 @@ static CK_MECHANISM_TYPE mechanismList[] = {
 #endif
 #ifndef NO_AES
     CKM_AES_KEY_GEN,
-#ifdef HAVE_AES_KEY_WRAP
+#ifdef HAVE_AES_KEYWRAP
     CKM_AES_KEY_WRAP,
     CKM_AES_KEY_WRAP_PAD,
 #endif
@@ -546,6 +546,9 @@ CK_RV C_GetMechanismList(CK_SLOT_ID slotID,
         return rv;
     }
     else if (*pulCount < (CK_ULONG)mechanismCnt) {
+        /* PKCS#11: on CKR_BUFFER_TOO_SMALL *pulCount must be set to the
+         * required count so the two-call (size-query then fetch) idiom works. */
+        *pulCount = mechanismCnt;
         rv = CKR_BUFFER_TOO_SMALL;
         WOLFPKCS11_LEAVE("C_GetMechanismList", rv);
         return rv;
@@ -737,7 +740,7 @@ static CK_MECHANISM_INFO tlsMacMechInfo = {
 static CK_MECHANISM_INFO aesKeyGenMechInfo = {
     16, 32, CKF_GENERATE
 };
-#ifdef HAVE_AES_KEY_WRAP
+#ifdef HAVE_AES_KEYWRAP
 static CK_MECHANISM_INFO aesKeyWrapMechInfo = {
     16, 32, CKF_ENCRYPT | CKF_DECRYPT | CKF_WRAP | CKF_UNWRAP
 };
@@ -1061,7 +1064,7 @@ CK_RV C_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type,
         case CKM_AES_KEY_GEN:
             XMEMCPY(pInfo, &aesKeyGenMechInfo, sizeof(CK_MECHANISM_INFO));
             break;
-#ifdef HAVE_AES_KEY_WRAP
+#ifdef HAVE_AES_KEYWRAP
         case CKM_AES_KEY_WRAP:
         case CKM_AES_KEY_WRAP_PAD:
             XMEMCPY(pInfo, &aesKeyWrapMechInfo, sizeof(CK_MECHANISM_INFO));
@@ -1315,12 +1318,16 @@ CK_RV C_InitToken(CK_SLOT_ID slotID, CK_UTF8CHAR_PTR pPin,
         return rv;
     }
 
+    /* PKCS#11: an open session on the token must fail C_InitToken with
+     * CKR_SESSION_EXISTS regardless of whether the token is already
+     * initialized. Check this unconditionally before any token-reset logic. */
+    if (WP11_Slot_HasSession(slot)) {
+        rv = CKR_SESSION_EXISTS;
+        WOLFPKCS11_LEAVE("C_InitToken", rv);
+        return rv;
+    }
+
     if (WP11_Slot_IsTokenInitialized(slot)) {
-        if (WP11_Slot_HasSession(slot)) {
-            rv = CKR_SESSION_EXISTS;
-            WOLFPKCS11_LEAVE("C_InitToken", rv);
-            return rv;
-        }
         if (WP11_Slot_SOPin_IsSet(slot)) {
             /* Verify the SO PIN with the failed-login lockout applied, so this
              * path cannot be used to brute-force the SO PIN (Fenrir F-4632).

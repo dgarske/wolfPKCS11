@@ -647,6 +647,20 @@ static wolfSSL_Mutex libraryInitLock
 #define WP11_HAVE_LIBRARY_INIT_LOCK
 #endif
 
+#if !defined(SINGLE_THREADED) && defined(WOLFSSL_MUTEX_INITIALIZER) && \
+    defined(WOLFSSL_MUTEX_INITIALIZER_CLAUSE) && \
+    !defined(WOLFPKCS11_TPM_STORE) && defined(WOLFPKCS11_NSS)
+/* Permanently-live leaf mutex serializing the module-global storeDir, which
+ * is set at C_Initialize (before globalLock exists), read in
+ * wolfPKCS11_Store_Name, and freed in WP11_Library_Final after globalLock is
+ * released. Without it the free races the set/read (Fenrir F-5868, F-5150).
+ * Static init mirrors libraryInitLock. It is always acquired as a leaf (no
+ * other lock is taken while it is held), so it cannot invert any ordering. */
+static wolfSSL_Mutex storeDirLock
+    WOLFSSL_MUTEX_INITIALIZER_CLAUSE(storeDirLock);
+#define WP11_HAVE_STORE_DIR_LOCK
+#endif
+
 
 #ifndef SINGLE_THREADED
 /**
@@ -1155,17 +1169,30 @@ static char* storeDir = NULL;
 
 int WP11_SetStoreDir(const char *dir, size_t dirSz)
 {
+    int ret = 0;
+#ifdef WP11_HAVE_STORE_DIR_LOCK
+    /* Serialize against the free in WP11_Library_Final and any concurrent set
+     * so the XFREE/XMALLOC/XMEMCPY sequence is not raced (F-5868). */
+    if (wc_LockMutex(&storeDirLock) != 0)
+        return BAD_MUTEX_E;
+#endif
     if (storeDir != NULL)
         XFREE(storeDir, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     storeDir = NULL;
     if (dir != NULL) {
         storeDir = (char*) XMALLOC(dirSz + 1, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        if (storeDir == NULL)
-            return MEMORY_E;
-        XMEMCPY(storeDir, dir, dirSz);
-        storeDir[dirSz] = '\0'; /* Ensure null termination */
+        if (storeDir == NULL) {
+            ret = MEMORY_E;
+        }
+        else {
+            XMEMCPY(storeDir, dir, dirSz);
+            storeDir[dirSz] = '\0'; /* Ensure null termination */
+        }
     }
-    return 0;
+#ifdef WP11_HAVE_STORE_DIR_LOCK
+    wc_UnLockMutex(&storeDirLock);
+#endif
+    return ret;
 }
 #endif
 
@@ -1358,6 +1385,9 @@ static int wolfPKCS11_Store_Name(int type, CK_ULONG id1, CK_ULONG id2, char* nam
      */
     enum { WP11_STORE_SUFFIX_RESERVE = 48 };
     char homePath[256];
+#ifdef WP11_HAVE_STORE_DIR_LOCK
+    char storeDirCopy[WP11_STORE_MAX_PATH];
+#endif
 
     /* Path order:
      * 1. Environment variable WOLFPKCS11_TOKEN_PATH
@@ -1371,8 +1401,27 @@ static int wolfPKCS11_Store_Name(int type, CK_ULONG id1, CK_ULONG id2, char* nam
 #endif
 
 #ifdef WOLFPKCS11_NSS
-    if (str == NULL)
+    if (str == NULL) {
+#ifdef WP11_HAVE_STORE_DIR_LOCK
+        /* Copy storeDir into a local under storeDirLock so a concurrent
+         * WP11_Library_Final free cannot leave str dangling while we format
+         * the path below (F-5150). The lock is released before use. */
+        if (wc_LockMutex(&storeDirLock) != 0)
+            return -1;
+        if (storeDir != NULL) {
+            size_t sdLen = XSTRLEN(storeDir);
+            if (sdLen >= sizeof(storeDirCopy)) {
+                wc_UnLockMutex(&storeDirLock);
+                return -1;
+            }
+            XMEMCPY(storeDirCopy, storeDir, sdLen + 1);
+            str = storeDirCopy;
+        }
+        wc_UnLockMutex(&storeDirLock);
+#else
         str = storeDir;
+#endif
+    }
 #endif
 
     if (str == NULL) {
@@ -3352,8 +3401,11 @@ static int wp11_Object_Load_Data(WP11_Object* object, int tokenId, int objId)
 #ifdef WOLFSSL_MAXQ10XX_CRYPTO
 #ifdef MAXQ10XX_PRODUCTION_KEY
 #include "maxq10xx_key.h"
-#else
-/* TEST KEY. This must be changed for production environments!! */
+#elif defined(WOLFPKCS11_MAXQ10XX_TEST_KEY)
+/* INSECURE TEST KEY. The private scalar (last 32 bytes) is public in the
+ * source, so anyone can forge a valid MXQ_ImportRootCert provisioning
+ * signature for an arbitrary root certificate. For development against the
+ * MAXQ10xx evaluation kit only - never ship this. */
 static mxq_u1 KeyPairImport[] = {
     0xd0,0x97,0x31,0xc7,0x63,0xc0,0x9e,0xe3,0x9a,0xb4,0xd0,0xce,0xa7,0x89,0xab,
     0x52,0xc8,0x80,0x3a,0x91,0x77,0x29,0xc3,0xa0,0x79,0x2e,0xe6,0x61,0x8b,0x2d,
@@ -3363,6 +3415,8 @@ static mxq_u1 KeyPairImport[] = {
     0x72,0x5e,0x88,0xaf,0xc2,0xee,0x8b,0x6f,0xe5,0x36,0xe3,0x60,0x7c,0xf8,0x2c,
     0xea,0x3a,0x4f,0xe3,0x6d,0x73
 };
+#else
+#error "MAXQ10xx root-cert provisioning key is undefined. Define MAXQ10XX_PRODUCTION_KEY (with a real maxq10xx_key.h) for production, or WOLFPKCS11_MAXQ10XX_TEST_KEY to explicitly opt into the built-in INSECURE test key for evaluation-kit development."
 #endif /* MAXQ10XX_PRODUCTION_KEY */
 
 static int crypto_sha256(const byte *buf, word32 len, byte *hash,
@@ -7722,8 +7776,22 @@ void WP11_Library_Final(void)
             (void)ret; /* store failure cannot be returned, so log and ignore */
         }
 #if !defined (WOLFPKCS11_CUSTOM_STORE) && defined(WOLFPKCS11_NSS)
-        XFREE(storeDir, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-        storeDir = NULL;
+        /* Serialize the free against a concurrent WP11_SetStoreDir /
+         * wolfPKCS11_Store_Name (F-5868, F-5150). Nested inside libraryInitLock
+         * (held here); storeDirLock is a leaf so the fixed order
+         * libraryInitLock -> storeDirLock cannot deadlock. */
+        {
+#ifdef WP11_HAVE_STORE_DIR_LOCK
+            int storeDirLocked = (wc_LockMutex(&storeDirLock) == 0);
+#endif
+            XFREE(storeDir, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            storeDir = NULL;
+#ifdef WP11_HAVE_STORE_DIR_LOCK
+            /* Only unlock if the lock was actually acquired. */
+            if (storeDirLocked)
+                wc_UnLockMutex(&storeDirLock);
+#endif
+        }
 #endif
 #endif
         /* Cleanup the slots. */
@@ -7988,6 +8056,12 @@ void WP11_Slot_CloseSessions(WP11_Slot* slot)
     for (curr = slot->session; curr != NULL; curr = curr->next)
         wp11_Session_Final(curr);
     WP11_Lock_UnlockRW(&slot->lock);
+
+    /* PKCS#11: closing an application's last session with a token logs the
+     * application out. Mirror the single-session close path and reset the
+     * token login state (outside the slot lock, as WP11_Slot_Logout takes it).
+     */
+    WP11_Slot_Logout(slot);
 }
 
 /**
@@ -8056,6 +8130,21 @@ static int HashPIN(char* pin, int pinLen, byte* seed, int seedLen, byte* hash,
                                     WP11_HASH_PIN_COST, WP11_HASH_PIN_BLOCKSIZE,
                                     WP11_HASH_PIN_PARALLEL, hashLen);
 #elif !defined(NO_SHA256)
+    /* Fallback: unsalted single-pass SHA-256 of the PIN. This provides no
+     * salt (the per-token seed is discarded) and no key stretching, so an
+     * attacker with the token-store file can brute-force a weak PIN offline
+     * and recover the token storage key. Configure WOLFPKCS11_PBKDF2 or
+     * HAVE_SCRYPT for a salted, stretched KDF. The selection is compile-time
+     * and otherwise silent, so warn integrators unless they opt out (F-6232).
+     * Note: changing this derivation would invalidate existing token stores,
+     * so hardening it in place is left as a deliberate maintainer decision. */
+#ifndef WOLFPKCS11_ALLOW_WEAK_PIN_KDF
+    #if defined(_MSC_VER)
+        #pragma message("wolfPKCS11: no PBKDF2/scrypt - PIN hashing and token key derivation use unsalted SHA-256; define WOLFPKCS11_PBKDF2 or HAVE_SCRYPT for a strong KDF, or WOLFPKCS11_ALLOW_WEAK_PIN_KDF to silence")
+    #elif defined(__GNUC__) || defined(__clang__)
+        #warning "wolfPKCS11: no PBKDF2/scrypt - PIN hashing and token key derivation use unsalted SHA-256; define WOLFPKCS11_PBKDF2 or HAVE_SCRYPT for a strong KDF, or WOLFPKCS11_ALLOW_WEAK_PIN_KDF to silence"
+    #endif
+#endif
     /* fallback to simple SHA2-256 hash of pin */
     (void)seed;
     (void)seedLen;
@@ -9460,6 +9549,13 @@ int WP11_Session_SetCbcParams(WP11_Session* session, unsigned char* iv,
     int ret;
     WP11_CbcParams* cbc = &session->params.cbc;
     WP11_Data* key;
+
+    /* The session params union is shared by every mechanism and is only zeroed
+     * at allocation, so a prior operation can leave stale multi-part streaming
+     * state here. Reset it before use (as the other Set*Params routines do) so
+     * a fresh CBC operation cannot inherit a bogus partial-block count. */
+    cbc->partialSz = 0;
+    XMEMSET(cbc->partial, 0, sizeof(cbc->partial));
 
     /* AES object on session. */
     ret = wc_AesInit(&cbc->aes, NULL, object->devId);
@@ -15453,6 +15549,13 @@ int WP11_AesCbc_EncryptUpdate(unsigned char* plain, word32 plainSz,
     int sz = 0;
     int outSz = 0;
 
+    /* Serialize the read-modify-write of cbc->partial/partialSz. Without this
+     * two threads sharing one session handle can both read partialSz, both
+     * copy into cbc->partial and both add, driving partialSz past
+     * AES_BLOCK_SIZE so the next call computes a negative sz and overflows the
+     * 16-byte partial buffer (F-5764). No caller holds slot->lock here. */
+    WP11_Lock_LockRW(&session->slot->lock);
+
     if (cbc->partialSz > 0) {
         sz = AES_BLOCK_SIZE - cbc->partialSz;
         if (sz > (int)plainSz)
@@ -15486,6 +15589,7 @@ int WP11_AesCbc_EncryptUpdate(unsigned char* plain, word32 plainSz,
     if (ret == 0)
         *encSz = outSz;
 
+    WP11_Lock_UnlockRW(&session->slot->lock);
     return ret;
 }
 
@@ -15560,6 +15664,10 @@ int WP11_AesCbc_DecryptUpdate(unsigned char* enc, word32 encSz,
     int sz = 0;
     int outSz = 0;
 
+    /* Serialize the partial-block read-modify-write against a concurrent
+     * update on the same session (F-5764); see WP11_AesCbc_EncryptUpdate. */
+    WP11_Lock_LockRW(&session->slot->lock);
+
     if (cbc->partialSz > 0) {
         sz = AES_BLOCK_SIZE - cbc->partialSz;
         if (sz > (int)encSz)
@@ -15592,6 +15700,7 @@ int WP11_AesCbc_DecryptUpdate(unsigned char* enc, word32 encSz,
     if (ret == 0)
         *decSz = outSz;
 
+    WP11_Lock_UnlockRW(&session->slot->lock);
     return ret;
 }
 
@@ -15764,6 +15873,10 @@ int WP11_AesCbcPad_DecryptUpdate(unsigned char* enc, word32 encSz,
     int sz = 0;
     int outSz = 0;
 
+    /* Serialize the partial-block read-modify-write against a concurrent
+     * update on the same session (F-5764); see WP11_AesCbc_EncryptUpdate. */
+    WP11_Lock_LockRW(&session->slot->lock);
+
     if (cbc->partialSz > 0) {
         sz = AES_BLOCK_SIZE - cbc->partialSz;
         if (sz > (int)encSz)
@@ -15777,6 +15890,7 @@ int WP11_AesCbcPad_DecryptUpdate(unsigned char* enc, word32 encSz,
              * far and leave the operation active (CKR_BUFFER_TOO_SMALL). */
             if ((word32)(outSz + AES_BLOCK_SIZE) > bufSz) {
                 *decSz = (word32)outSz + AES_BLOCK_SIZE;
+                WP11_Lock_UnlockRW(&session->slot->lock);
                 return BUFFER_E;
             }
             ret = wc_AesCbcDecrypt(&cbc->aes, dec, cbc->partial,
@@ -15792,6 +15906,7 @@ int WP11_AesCbcPad_DecryptUpdate(unsigned char* enc, word32 encSz,
             sz -= AES_BLOCK_SIZE;
         if ((word32)(outSz + sz) > bufSz) {
             *decSz = (word32)(outSz + sz);
+            WP11_Lock_UnlockRW(&session->slot->lock);
             return BUFFER_E;
         }
         ret = wc_AesCbcDecrypt(&cbc->aes, dec, enc, sz);
@@ -15806,6 +15921,7 @@ int WP11_AesCbcPad_DecryptUpdate(unsigned char* enc, word32 encSz,
     if (ret == 0)
         *decSz = outSz;
 
+    WP11_Lock_UnlockRW(&session->slot->lock);
     return ret;
 }
 

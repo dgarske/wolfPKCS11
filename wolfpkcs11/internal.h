@@ -331,7 +331,12 @@ C_EXTRA_FLAGS="-DWOLFSSL_PUBLIC_MP -DWC_RSA_DIRECT"
 #define WP11_HASH_PIN_PARALLEL         1
 #endif
 
-/* PIN length constraints. */
+/* PIN length constraints. The NSS default is 0: an empty user PIN is allowed
+ * and intentionally disables login (C_GetTokenInfo clears CKF_LOGIN_REQUIRED
+ * and token objects are decoded at load without C_Login) for NSS tool
+ * compatibility (certutil / PK11_InitPin bootstrap empty-password databases).
+ * Integrators who require an enforced minimum can override with
+ * -DWP11_MIN_PIN_LEN=N (N>0). */
 #ifndef WP11_MIN_PIN_LEN
 #ifdef WOLFPKCS11_NSS
 #define WP11_MIN_PIN_LEN               0
