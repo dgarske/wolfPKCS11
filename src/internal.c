@@ -14400,7 +14400,9 @@ static int EcGenerateTpmKey(WP11_Object* priv, WP11_Slot* slot, int* genOnTpm)
             (TPMA_OBJECT)objAttrs, (TPM_ECC_CURVE)curveId, scheme);
     }
     if (ret == 0) {
-        /* Match the name and scheme hash to the curve strength. */
+        /* Match the name and scheme hash to the curve strength. The scheme
+         * may be ECDSA, ECDH or NULL, so set the hash through the common
+         * member the marshalling reads. */
         if (curveId == TPM_ECC_NIST_P521)
             hashAlg = TPM_ALG_SHA512;
         else if (curveId == TPM_ECC_NIST_P384)
@@ -14408,7 +14410,7 @@ static int EcGenerateTpmKey(WP11_Object* priv, WP11_Slot* slot, int* genOnTpm)
         else
             hashAlg = TPM_ALG_SHA256;
         publicTemplate.nameAlg = hashAlg;
-        publicTemplate.parameters.eccDetail.scheme.details.ecdsa.hashAlg =
+        publicTemplate.parameters.eccDetail.scheme.details.any.hashAlg =
             hashAlg;
 
         ret = wolfTPM2_CreateKey(&slot->tpmDev, priv->tpmKey,

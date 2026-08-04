@@ -9435,8 +9435,6 @@ static CK_RV ecdsa_test(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE privKey,
 }
 
 /* Tests for error occurring when private and public curves mismatch. */
-/* Crashes with TPM test right now. */
-#ifndef WOLFPKCS11_TPM
 static CK_RV test_ecc_curve(void *args)
 {
     CK_SESSION_HANDLE session = *(CK_SESSION_HANDLE*)args;
@@ -9570,7 +9568,6 @@ static CK_RV test_ecc_curve(void *args)
 
     return ret;
 }
-#endif
 
 /* Calling C_SetAttributeValue used to erase a key */
 static CK_RV test_ecc_key_erase_bug(void* args)
@@ -18193,9 +18190,7 @@ static TEST_FUNC testFunc[] = {
 #endif
 #endif /* !NO_RSA */
 #ifdef HAVE_ECC
-#ifndef WOLFPKCS11_TPM
     PKCS11TEST_FUNC_SESS_DECL(test_ecc_curve),
-#endif
     PKCS11TEST_FUNC_SESS_DECL(test_ecc_key_erase_bug),
     PKCS11TEST_FUNC_SESS_DECL(test_ecc_create_key_fail),
     PKCS11TEST_FUNC_SESS_DECL(test_ecc_fixed_keys_ecdh),
