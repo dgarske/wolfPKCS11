@@ -9221,6 +9221,15 @@ static CK_RV ecdh_test(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE privKey,
             CHECK_CKR(ret, "Secret compare with expected");
         }
     }
+    else if (ret == CKR_OK) {
+        /* An all-zero secret is the signature of a derive that ran without
+         * the private key material (identity/empty scalar result). */
+        word32 i;
+        byte acc = 0;
+        for (i = 0; i < outSz; i++)
+            acc |= out[i];
+        CHECK_COND(acc != 0, ret, "EC Derive Key secret is all zeros");
+    }
     if (ret == CKR_OK) {
         mech.pParameter = NULL;
         ret = funcList->C_DeriveKey(session, &mech, privKey, tmpl, tmplCnt,

@@ -10319,6 +10319,27 @@ void WP11_Object_Free(WP11_Object* object)
 #ifdef WOLFPKCS11_TPM
     if (object->tpmKey != NULL) {
         wolfTPM2_UnloadHandle(&object->slot->tpmDev, &object->tpmKey->handle);
+        /* Drop crypto callback references to the key being freed so the
+         * callback cannot act on freed memory. */
+    #ifndef NO_RSA
+        if (object->slot->tpmCtx.rsaKey == (WOLFTPM2_KEY*)object->tpmKey)
+            object->slot->tpmCtx.rsaKey = NULL;
+        #ifdef WOLFSSL_KEY_GEN
+        if (object->slot->tpmCtx.rsaKeyGen == object->tpmKey)
+            object->slot->tpmCtx.rsaKeyGen = NULL;
+        #endif
+    #endif
+    #ifdef HAVE_ECC
+        #if defined(LIBWOLFTPM_VERSION_HEX) && LIBWOLFTPM_VERSION_HEX > 0x03009000
+        if (object->slot->tpmCtx.ecdsaKey == object->tpmKey)
+            object->slot->tpmCtx.ecdsaKey = NULL;
+        #else
+        if (object->slot->tpmCtx.eccKey == (WOLFTPM2_KEY*)object->tpmKey)
+            object->slot->tpmCtx.eccKey = NULL;
+        #endif
+        if (object->slot->tpmCtx.ecdhKey == (WOLFTPM2_KEY*)object->tpmKey)
+            object->slot->tpmCtx.ecdhKey = NULL;
+    #endif
         XFREE(object->tpmKey, NULL, DYNAMIC_TYPE_TMP_BUFFER);
     }
 #endif
@@ -14311,6 +14332,114 @@ int WP11_RsaPKCSPSS_Verify(unsigned char* sig, word32 sigLen,
 #endif /* !NO_RSA */
 
 #ifdef HAVE_ECC
+#ifdef WOLFPKCS11_TPM
+/**
+ * Generate an EC key pair on the TPM.
+ *
+ * The key is created under the storage key with capabilities matching the
+ * object's attributes: CKA_SIGN maps to the TPM sign attribute and CKA_DERIVE
+ * to the decrypt attribute, which TPM2_ECDH_ZGen requires. When both are set
+ * the null scheme is used, as the TPM mandates for sign+decrypt keys.
+ *
+ * @param  priv      [in]   Private key object.
+ * @param  slot      [in]   Slot operation is performed on.
+ * @param  genOnTpm  [out]  1 when the key was generated on the TPM, 0 when
+ *                          the curve is not supported and the key is to be
+ *                          generated in software.
+ * @return  -ve when key generation fails.
+ *          0 on success.
+ */
+static int EcGenerateTpmKey(WP11_Object* priv, WP11_Slot* slot, int* genOnTpm)
+{
+    int ret;
+    int curveId = 0;
+    int objAttrs;
+    CK_BBOOL isSign = CK_FALSE;
+    CK_BBOOL isDerive = CK_FALSE;
+    CK_ULONG len;
+    TPM_ALG_ID scheme;
+    TPMI_ALG_HASH hashAlg;
+    TPMT_PUBLIC publicTemplate;
+
+    *genOnTpm = 0;
+
+    len = sizeof(isSign);
+    ret = WP11_Object_GetAttr(priv, CKA_SIGN, &isSign, &len);
+    if (ret == 0) {
+        len = sizeof(isDerive);
+        ret = WP11_Object_GetAttr(priv, CKA_DERIVE, &isDerive, &len);
+    }
+
+    if (ret == 0) {
+        ret = TPM2_GetTpmCurve(priv->data.ecKey->dp->id);
+        if (ret < 0) {
+            /* Curve not known to the TPM - generate in software. */
+            return 0;
+        }
+        curveId = ret;
+        ret = 0;
+    }
+
+    if (ret == 0) {
+        objAttrs = TPMA_OBJECT_sensitiveDataOrigin | TPMA_OBJECT_userWithAuth |
+                                                              TPMA_OBJECT_noDA;
+        if (isSign)
+            objAttrs |= TPMA_OBJECT_sign;
+        if (isDerive || !isSign)
+            objAttrs |= TPMA_OBJECT_decrypt;
+        /* The TPM requires the null scheme when both sign and decrypt are
+         * set. Otherwise bind the key to its one scheme. */
+        if (isSign && isDerive)
+            scheme = TPM_ALG_NULL;
+        else if (isSign)
+            scheme = TPM_ALG_ECDSA;
+        else
+            scheme = TPM_ALG_ECDH;
+
+        ret = wolfTPM2_GetKeyTemplate_ECC(&publicTemplate,
+            (TPMA_OBJECT)objAttrs, (TPM_ECC_CURVE)curveId, scheme);
+    }
+    if (ret == 0) {
+        /* Match the name and scheme hash to the curve strength. */
+        if (curveId == TPM_ECC_NIST_P521)
+            hashAlg = TPM_ALG_SHA512;
+        else if (curveId == TPM_ECC_NIST_P384)
+            hashAlg = TPM_ALG_SHA384;
+        else
+            hashAlg = TPM_ALG_SHA256;
+        publicTemplate.nameAlg = hashAlg;
+        publicTemplate.parameters.eccDetail.scheme.details.ecdsa.hashAlg =
+            hashAlg;
+
+        ret = wolfTPM2_CreateKey(&slot->tpmDev, priv->tpmKey,
+            &slot->tpmSrk.handle, &publicTemplate, NULL, 0);
+        if (ret == 0) {
+            ret = wolfTPM2_LoadKey(&slot->tpmDev, priv->tpmKey,
+                &slot->tpmSrk.handle);
+        }
+        if (ret > 0 && (ret & RC_MAX_FMT1) == TPM_RC_CURVE) {
+            /* Curve not supported on this TPM - generate in software. */
+            priv->tpmKey->handle.hndl = TPM_RH_NULL;
+            return 0;
+        }
+    }
+    if (ret == 0) {
+        /* Export the public part into the wolf key. */
+        ret = wolfTPM2_EccKey_TpmToWolf(&slot->tpmDev,
+            (WOLFTPM2_KEY*)priv->tpmKey, priv->data.ecKey);
+        if (ret == 0) {
+            /* set flag indicating this is TPM based key */
+            priv->opFlag |= WP11_FLAG_TPM;
+            *genOnTpm = 1;
+        }
+        /* unload handle and reload when used */
+        wolfTPM2_UnloadHandle(&slot->tpmDev, &priv->tpmKey->handle);
+    }
+
+    return ret;
+}
+#endif /* WOLFPKCS11_TPM */
+
 /**
  * Generate an EC key pair.
  *
@@ -14325,43 +14454,44 @@ int WP11_Ec_GenerateKeyPair(WP11_Object* pub, WP11_Object* priv,
 {
     int ret = 0;
     WC_RNG rng;
+#ifdef WOLFPKCS11_TPM
+    int genOnTpm = 0;
+#endif
 
     ret = wc_ecc_init_ex(priv->data.ecKey, NULL, priv->devId);
     if (ret == 0) {
-    #ifdef WOLFPKCS11_TPM
-        CK_BBOOL isSign = CK_FALSE;
-        CK_ULONG len = sizeof(isSign);
-        ret = WP11_Object_GetAttr(priv, CKA_SIGN, &isSign, &len);
-        if (ret == 0 && isSign) {
-        #if defined(LIBWOLFTPM_VERSION_HEX) && LIBWOLFTPM_VERSION_HEX > 0x03009000
-            priv->slot->tpmCtx.ecdsaKey = priv->tpmKey;
-        #else
-            priv->slot->tpmCtx.eccKey = (WOLFTPM2_KEY*)priv->tpmKey;
-        #endif
-        }
-        else {
-            priv->slot->tpmCtx.ecdhKey = (WOLFTPM2_KEY*)priv->tpmKey;
-        }
-    #endif
-
         /* Copy parameters from public key into private key. */
         priv->data.ecKey->dp = pub->data.ecKey->dp;
 
-        /* Generate into the private key. */
-        ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
-        if (ret == 0) {
-            ret = wc_ecc_make_key_ex(&rng, priv->data.ecKey->dp->size,
-                                    priv->data.ecKey, priv->data.ecKey->dp->id);
+    #ifdef WOLFPKCS11_TPM
+        /* Create the key on the TPM with capabilities matching the object's
+         * attributes. The crypto callback key generation is not used as it
+         * only creates signing keys, which the TPM refuses to use for ECDH,
+         * and the software copy of a TPM key holds no private scalar. */
+        ret = EcGenerateTpmKey(priv, slot, &genOnTpm);
+        if (ret == 0 && !genOnTpm)
+    #endif
+        {
         #ifdef WOLFPKCS11_TPM
-            if (ret == 0) {
-                /* set flag indicating this is TPM based key */
-                priv->opFlag |= WP11_FLAG_TPM;
-
-                /* unload handle and reload when used */
-                wolfTPM2_UnloadHandle(&slot->tpmDev, &priv->tpmKey->handle);
-            }
+            /* Curve not supported on the TPM - generate a software key.
+             * Clear the crypto callback key references so the callback
+             * yields to software instead of acting on a previous key. */
+            #if defined(LIBWOLFTPM_VERSION_HEX) && \
+                LIBWOLFTPM_VERSION_HEX > 0x03009000
+            slot->tpmCtx.ecdsaKey = NULL;
+            #else
+            slot->tpmCtx.eccKey = NULL;
+            #endif
+            slot->tpmCtx.ecdhKey = NULL;
         #endif
-            Rng_Free(&rng);
+
+            /* Generate into the private key. */
+            ret = Rng_New(&slot->token.rng, &slot->token.rngLock, &rng);
+            if (ret == 0) {
+                ret = wc_ecc_make_key_ex(&rng, priv->data.ecKey->dp->size,
+                                    priv->data.ecKey, priv->data.ecKey->dp->id);
+                Rng_Free(&rng);
+            }
         }
         if (ret == 0) {
             /* Copy the public part into public key. */
@@ -14719,17 +14849,44 @@ int WP11_EC_Derive(unsigned char* point, word32 pointLen, unsigned char* key,
 #endif
     if (ret == 0) {
     #ifdef WOLFPKCS11_TPM
-        ret = WP11_Object_LoadTpmKey(priv);
-        if (ret == 0)
+        if (priv->opFlag & WP11_FLAG_TPM) {
+            /* The private scalar only exists inside the TPM (the software
+             * key holds just the public point), so the shared secret must
+             * be computed with TPM2_ECDH_ZGen. Falling through to software
+             * would derive from an empty scalar. */
+            TPM2B_ECC_POINT pubPoint;
+            int zSz = (int)*keyLen;
+
+            XMEMSET(&pubPoint, 0, sizeof(pubPoint));
+            if ((priv->tpmKey->pub.publicArea.objectAttributes &
+                                                  TPMA_OBJECT_decrypt) == 0) {
+                /* Key created without the decrypt attribute (a sign-only
+                 * key, for example from a store written before derive
+                 * support) - the TPM will not permit ECDH with it and
+                 * there is no software private key to fall back on. */
+                ret = BAD_FUNC_ARG;
+            }
+            if (ret == 0)
+                ret = WP11_Object_LoadTpmKey(priv);
+            if (ret == 0) {
+                ret = wolfTPM2_EccKey_WolfToPubPoint(&priv->slot->tpmDev,
+                    &pubKey, &pubPoint);
+                if (ret == 0) {
+                    ret = wolfTPM2_ECDHGenZ(&priv->slot->tpmDev,
+                        (WOLFTPM2_KEY*)priv->tpmKey, &pubPoint, key, &zSz);
+                }
+                if (ret == 0)
+                    *keyLen = (word32)zSz;
+                wolfTPM2_UnloadHandle(&priv->slot->tpmDev,
+                    &priv->tpmKey->handle);
+            }
+        }
+        else
     #endif
         {
             PRIVATE_KEY_UNLOCK();
             ret = wc_ecc_shared_secret(priv->data.ecKey, &pubKey, key, keyLen);
             PRIVATE_KEY_LOCK();
-
-        #ifdef WOLFPKCS11_TPM
-            wolfTPM2_UnloadHandle(&priv->slot->tpmDev, &priv->tpmKey->handle);
-        #endif
         }
 #if defined(ECC_TIMING_RESISTANT) && (!defined(HAVE_FIPS) || \
     (defined(HAVE_FIPS_VERSION) && (HAVE_FIPS_VERSION > 2)))
