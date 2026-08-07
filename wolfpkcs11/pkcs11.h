@@ -523,6 +523,12 @@ typedef CK_ULONG          CK_CERTIFICATE_TYPE;
 typedef CK_ULONG          CK_RV;
 
 
+/* PKCS#11 on Windows uses 1-byte struct packing; see issue 208. */
+#if defined(_WIN32) && !defined(WOLFPKCS11_NO_PACKED_STRUCTS)
+    #pragma pack(push, 1)
+#endif
+
+
 typedef struct CK_VERSION {
     CK_BYTE major;
     CK_BYTE minor;
@@ -1940,6 +1946,10 @@ struct CK_FUNCTION_LIST_3_2 {
     CK_RV (*C_AsyncJoin)(CK_SESSION_HANDLE hSession, CK_UTF8CHAR_PTR pFunctionName,
                          CK_ULONG ulID, CK_BYTE_PTR pData, CK_ULONG ulData);
 };
+
+#if defined(_WIN32) && !defined(WOLFPKCS11_NO_PACKED_STRUCTS)
+    #pragma pack(pop)
+#endif
 
 /* Debug control functions */
 #ifdef DEBUG_WOLFPKCS11
